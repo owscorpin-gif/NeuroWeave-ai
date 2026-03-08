@@ -1,0 +1,5 @@
+{
+  "name": "NeuroWeave AI",
+  "description": "A futuristic multimodal AI platform featuring real-time voice/vision agents, interleaved creative storytelling, and visual interface understanding.",
+  "requestFramePermissions": ["camera", "microphone", "display-capture"]
+}
