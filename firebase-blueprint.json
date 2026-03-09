@@ -9,6 +9,7 @@
         "displayName": { "type": "string", "description": "User's display name." },
         "email": { "type": "string", "format": "email", "description": "User's email address." },
         "photoURL": { "type": "string", "description": "URL to the user's profile picture." },
+        "role": { "type": "string", "enum": ["admin", "user", "developer", "guest"], "description": "User's role for RBAC." },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the profile was created." }
       },
       "required": ["uid", "email"]

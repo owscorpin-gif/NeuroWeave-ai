@@ -1,5 +1,6 @@
-import { GoogleGenAI, GenerateContentResponse, Modality } from "@google/genai";
+import { GoogleGenAI, GenerateContentResponse, Modality, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { MessagePart } from "../types";
+import { PromptGuard, AIUsageTracker } from "../utils/security";
 
 const apiKey = process.env.GEMINI_API_KEY || "";
 
@@ -10,17 +11,55 @@ export const getAI = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
+  },
+];
+
+const processParts = (parts: any[]): any[] => {
+  if (!AIUsageTracker.canRequest()) {
+    throw new Error("AI usage limit reached. Please wait a moment.");
+  }
+
+  return parts.map(part => {
+    if (part.text) {
+      if (PromptGuard.isMalicious(part.text)) {
+        throw new Error("Security Alert: Malicious prompt detected.");
+      }
+      return { text: PromptGuard.wrapUserPrompt(part.text) };
+    }
+    return part;
+  });
+};
+
 export const generateMultimodalResponse = async (
   modelName: string,
   parts: any[],
   systemInstruction?: string
 ): Promise<GenerateContentResponse> => {
   const ai = getAI();
+  const safeParts = processParts(parts);
+  
   return await ai.models.generateContent({
     model: modelName,
-    contents: [{ role: "user", parts }],
+    contents: [{ role: "user", parts: safeParts }],
     config: {
       systemInstruction,
+      safetySettings,
     },
   });
 };
@@ -31,11 +70,14 @@ export const streamMultimodalResponse = async function* (
   systemInstruction?: string
 ) {
   const ai = getAI();
+  const safeParts = processParts(parts);
+
   const response = await ai.models.generateContentStream({
     model: modelName,
-    contents: [{ role: "user", parts }],
+    contents: [{ role: "user", parts: safeParts }],
     config: {
       systemInstruction,
+      safetySettings,
     },
   });
 
@@ -45,16 +87,22 @@ export const streamMultimodalResponse = async function* (
 };
 
 export const generateImage = async (prompt: string) => {
+  if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
   const ai = getAI();
+  const safePrompt = PromptGuard.isMalicious(prompt) 
+    ? "A beautiful landscape" 
+    : PromptGuard.wrapUserPrompt(prompt);
+
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: {
-      parts: [{ text: prompt }],
+      parts: [{ text: safePrompt }],
     },
     config: {
       imageConfig: {
         aspectRatio: "16:9",
       },
+      safetySettings,
     },
   });
 
@@ -67,10 +115,15 @@ export const generateImage = async (prompt: string) => {
 };
 
 export const generateVideo = async (prompt: string, imageBase64?: string) => {
+  if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
   const ai = getAI();
+  const safePrompt = PromptGuard.isMalicious(prompt) 
+    ? "A cinematic landscape" 
+    : PromptGuard.wrapUserPrompt(prompt);
+
   let operation = await ai.models.generateVideos({
     model: 'veo-3.1-fast-generate-preview',
-    prompt,
+    prompt: safePrompt,
     image: imageBase64 ? {
       imageBytes: imageBase64,
       mimeType: 'image/png',
@@ -91,10 +144,15 @@ export const generateVideo = async (prompt: string, imageBase64?: string) => {
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Kore') => {
+  if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
   const ai = getAI();
+  const safeText = PromptGuard.isMalicious(text) 
+    ? "I cannot process this request due to security policies." 
+    : PromptGuard.wrapUserPrompt(text);
+
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
-    contents: [{ parts: [{ text }] }],
+    contents: [{ parts: [{ text: safeText }] }],
     config: {
       responseModalities: [Modality.AUDIO],
       speechConfig: {
@@ -102,6 +160,7 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore') =
           prebuiltVoiceConfig: { voiceName },
         },
       },
+      safetySettings,
     },
   });
 

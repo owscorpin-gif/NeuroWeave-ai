@@ -1,30 +1,37 @@
 import React, { useState } from "react";
 import { generateVideo } from "../services/geminiService";
-import { Sparkles, Video, Image as ImageIcon, Wand2, Loader2, Download } from "lucide-react";
+import { Sparkles, Video, Image as ImageIcon, Wand2, Loader2, Download, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { sanitizeText } from "../utils/security";
 
 export const MediaStudio: React.FC = () => {
   const [prompt, setPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [generatedMedia, setGeneratedMedia] = useState<{ type: 'image' | 'video', url: string }[]>([]);
 
   const handleGenerate = async (type: 'image' | 'video') => {
     if (!prompt.trim()) return;
+    setError(null);
     setIsGenerating(true);
+    
+    // Sanitize prompt
+    const sanitizedPrompt = sanitizeText(prompt);
+    
     try {
       if (type === 'video') {
-        const videoUrl = await generateVideo(prompt);
+        const videoUrl = await generateVideo(sanitizedPrompt);
         if (videoUrl) {
           setGeneratedMedia(prev => [{ type: 'video', url: videoUrl }, ...prev]);
         }
       } else {
         // Image generation logic would go here
-        // For now, let's simulate or use a placeholder
         const placeholderUrl = `https://picsum.photos/seed/${Math.random()}/1280/720`;
         setGeneratedMedia(prev => [{ type: 'image', url: placeholderUrl }, ...prev]);
       }
     } catch (error) {
       console.error("Generation error:", error);
+      setError("Failed to generate media. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -47,6 +54,12 @@ export const MediaStudio: React.FC = () => {
 
       <div className="max-w-4xl">
         <div className="glass rounded-3xl p-6 mb-12 border-accent/20">
+          {error && (
+            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 text-sm">
+              <AlertCircle size={18} />
+              {error}
+            </div>
+          )}
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}

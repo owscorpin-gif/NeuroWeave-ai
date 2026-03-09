@@ -1,8 +1,9 @@
 import React from "react";
-import { LayoutDashboard, MessageSquare, Image as ImageIcon, Settings, LogOut, Cpu } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Image as ImageIcon, Settings, LogOut, Cpu, Shield } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { signOut } from "../firebase";
+import { useFirebase } from "../context/FirebaseContext";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -14,12 +15,18 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
+  const { role } = useFirebase();
+  
   const menuItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { id: "chat", icon: MessageSquare, label: "Agents" },
     { id: "studio", icon: ImageIcon, label: "Media Studio" },
     { id: "settings", icon: Settings, label: "Settings" },
   ];
+
+  if (role === 'admin') {
+    menuItems.push({ id: "admin", icon: Shield, label: "Admin" });
+  }
 
   return (
     <div className="w-64 h-screen glass border-r border-white/5 flex flex-col z-50">

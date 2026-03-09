@@ -13,25 +13,45 @@ service cloud.firestore {
     function isDocOwner() {
       return isAuthenticated() && request.auth.uid == resource.data.userId;
     }
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function isAdmin() {
+      return isAuthenticated() && (
+        getRole() == 'admin' || 
+        (request.auth.token.email == "shashwat.kesarwani12405@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+    function isDeveloper() {
+      return isAuthenticated() && (getRole() == 'developer' || isAdmin());
+    }
 
     // ===============================================================
     // Rules
     // ===============================================================
 
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isAuthenticated();
+      // Only admins can update roles. Users can update their own profile but not their role.
+      allow create: if isOwner(userId) && request.resource.data.role == 'user';
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      allow delete: if isAdmin();
     }
 
     match /conversations/{conversationId} {
-      allow read, write: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid || 
-        resource.data.userId == request.auth.uid
-      );
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       
       match /messages/{messageId} {
-        allow read, write: if isAuthenticated() && (
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid || 
+          isAdmin()
+        );
+        allow create: if isAuthenticated() && (
           get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid
         );
+        allow update, delete: if isAdmin();
       }
     }
   }

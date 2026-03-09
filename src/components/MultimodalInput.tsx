@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Mic, Image as ImageIcon, Monitor, X, Paperclip } from "lucide-react";
+import { Send, Mic, Image as ImageIcon, Monitor, X, Paperclip, Camera } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -16,6 +16,8 @@ interface MultimodalInputProps {
   isVideoActive?: boolean;
   onToggleVideo?: () => void;
   videoStream?: MediaStream | null;
+  isScreenActive?: boolean;
+  onToggleScreen?: () => void;
 }
 
 export const MultimodalInput: React.FC<MultimodalInputProps> = ({ 
@@ -25,7 +27,9 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
   onToggleLive,
   isVideoActive = false,
   onToggleVideo,
-  videoStream
+  videoStream,
+  isScreenActive = false,
+  onToggleScreen
 }) => {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -59,14 +63,14 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
   return (
     <div className="relative max-w-4xl mx-auto w-full px-4 pb-8">
       <AnimatePresence>
-        {(files.length > 0 || isVideoActive) && (
+        {(files.length > 0 || isVideoActive || isScreenActive) && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide items-end"
           >
-            {isVideoActive && (
+            {(isVideoActive || isScreenActive) && (
               <div className="relative group flex-shrink-0">
                 <div className="w-48 aspect-video rounded-xl bg-black border border-accent/30 overflow-hidden shadow-[0_0_20px_rgba(16,185,129,0.1)]">
                   <video
@@ -74,11 +78,13 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
                     autoPlay
                     muted
                     playsInline
-                    className="w-full h-full object-cover mirror"
+                    className={cn("w-full h-full object-cover", isVideoActive && "mirror")}
                   />
                   <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 bg-black/60 backdrop-blur-md rounded-lg border border-white/10">
                     <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-[10px] text-white font-mono uppercase tracking-wider">Live Vision</span>
+                    <span className="text-[10px] text-white font-mono uppercase tracking-wider">
+                      {isScreenActive ? "Screen Stream" : "Live Vision"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -125,6 +131,16 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
               isVideoActive ? "bg-accent/20 text-accent" : "text-gray-400 hover:bg-white/5 hover:text-white"
             )}
             title={isVideoActive ? "Stop Camera" : "Start Camera"}
+          >
+            <Camera size={20} />
+          </button>
+          <button
+            onClick={onToggleScreen}
+            className={cn(
+              "p-2.5 rounded-xl transition-all",
+              isScreenActive ? "bg-accent/20 text-accent" : "text-gray-400 hover:bg-white/5 hover:text-white"
+            )}
+            title={isScreenActive ? "Stop Screen Share" : "Share Screen"}
           >
             <Monitor size={20} />
           </button>

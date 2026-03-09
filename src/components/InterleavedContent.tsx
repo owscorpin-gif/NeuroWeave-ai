@@ -11,25 +11,26 @@ interface InterleavedContentProps {
 export const InterleavedContent: React.FC<InterleavedContentProps> = ({ text }) => {
   const [mediaMap, setMediaMap] = useState<Record<string, { url?: string; loading: boolean; error?: string }>>({});
 
-  const parts = text.split(/(\[IMAGE:.*?\]|\[VIDEO:.*?\]|\[AUDIO:.*?\])/g);
+  const parts = text.split(/(\[(?:IMAGE|VIDEO|AUDIO):?\s*.*?\])/gi);
 
   useEffect(() => {
     parts.forEach(async (part) => {
-      if (part.startsWith("[IMAGE:") || part.startsWith("[VIDEO:") || part.startsWith("[AUDIO:")) {
+      const trimmedPart = part.trim().toUpperCase();
+      if (trimmedPart.startsWith("[IMAGE:") || trimmedPart.startsWith("[VIDEO:") || trimmedPart.startsWith("[AUDIO:")) {
         const key = part;
         if (mediaMap[key]) return;
 
         setMediaMap(prev => ({ ...prev, [key]: { loading: true } }));
 
         try {
-          const prompt = part.match(/\[.*?: (.*?)\]/)?.[1] || "";
+          const prompt = part.match(/\[.*?:?\s*(.*?)\]/)?.[1] || "";
           let url = "";
 
-          if (part.startsWith("[IMAGE:")) {
+          if (trimmedPart.startsWith("[IMAGE:")) {
             url = await generateImage(prompt) || "";
-          } else if (part.startsWith("[VIDEO:")) {
+          } else if (trimmedPart.startsWith("[VIDEO:")) {
             url = await generateVideo(prompt) || "";
-          } else if (part.startsWith("[AUDIO:")) {
+          } else if (trimmedPart.startsWith("[AUDIO:")) {
             const base64 = await generateSpeech(prompt);
             if (base64) {
               url = `data:audio/mp3;base64,${base64}`;
@@ -48,7 +49,8 @@ export const InterleavedContent: React.FC<InterleavedContentProps> = ({ text }) 
   return (
     <div className="space-y-4">
       {parts.map((part, i) => {
-        if (part.startsWith("[IMAGE:")) {
+        const trimmedPart = part.trim().toUpperCase();
+        if (trimmedPart.startsWith("[IMAGE:")) {
           const media = mediaMap[part];
           return (
             <motion.div 
@@ -74,7 +76,7 @@ export const InterleavedContent: React.FC<InterleavedContentProps> = ({ text }) 
           );
         }
 
-        if (part.startsWith("[VIDEO:")) {
+        if (trimmedPart.startsWith("[VIDEO:")) {
           const media = mediaMap[part];
           return (
             <motion.div 
@@ -100,7 +102,7 @@ export const InterleavedContent: React.FC<InterleavedContentProps> = ({ text }) 
           );
         }
 
-        if (part.startsWith("[AUDIO:")) {
+        if (trimmedPart.startsWith("[AUDIO:")) {
           const media = mediaMap[part];
           return (
             <motion.div 

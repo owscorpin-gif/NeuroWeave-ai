@@ -3,13 +3,16 @@ import { Agent, Message, MessagePart } from "../types";
 import { MultimodalInput } from "../components/MultimodalInput";
 import { ResponseViewer } from "../components/ResponseViewer";
 import { streamMultimodalResponse } from "../services/geminiService";
-import { ChevronLeft, Info, MoreVertical, Trash2, Zap, PenTool, Compass, Mic } from "lucide-react";
+import { ChevronLeft, Info, MoreVertical, Trash2, Zap, PenTool, Compass, Mic, Monitor } from "lucide-react";
 import { useLiveSession } from "../hooks/useLiveSession";
+import { sanitizeText, validateFile, scanFileForMalware } from "../utils/security";
+import { uploadFileSecurely } from "../services/storageService";
 
 const icons = {
   Zap,
   PenTool,
   Compass,
+  Monitor,
 };
 
 import { motion, AnimatePresence } from "motion/react";
@@ -22,26 +25,52 @@ interface ChatProps {
 export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { isConnected, isRecording, toggleSession, modelTranscript, isVideoActive, toggleVideo, videoStream, sendMedia } = useLiveSession(agent?.systemInstruction);
+  const { 
+    isConnected, 
+    isRecording, 
+    toggleSession, 
+    transcript, 
+    modelTranscript, 
+    isVideoActive, 
+    toggleVideo, 
+    videoStream, 
+    isScreenActive, 
+    toggleScreen, 
+    screenStream, 
+    sendMedia 
+  } = useLiveSession(agent?.systemInstruction);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, modelTranscript]);
+  }, [messages, modelTranscript, transcript]);
 
-  // Sync live transcript to messages if needed, or just show it live
+  // Sync live user transcript to messages
   useEffect(() => {
-    if (modelTranscript && isConnected) {
-      // Update the last message if it's from the model during a live session
+    if (transcript && isConnected) {
       setMessages(prev => {
         const last = prev[prev.length - 1];
-        if (last && last.role === 'model' && last.id === 'live-session') {
+        if (last && last.role === 'user' && last.id === 'live-user-session') {
+          return [...prev.slice(0, -1), { ...last, parts: [{ text: sanitizeText(transcript) }] }];
+        }
+        return [...prev, { id: 'live-user-session', role: 'user', parts: [{ text: sanitizeText(transcript) }], timestamp: Date.now() }];
+      });
+    }
+  }, [transcript, isConnected]);
+
+  // Sync live model transcript to messages
+  useEffect(() => {
+    if (modelTranscript && isConnected) {
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'model' && last.id === 'live-model-session') {
           return [...prev.slice(0, -1), { ...last, parts: [{ text: modelTranscript }] }];
         }
-        return [...prev, { id: 'live-session', role: 'model', parts: [{ text: modelTranscript }], timestamp: Date.now() }];
+        return [...prev, { id: 'live-model-session', role: 'model', parts: [{ text: modelTranscript }], timestamp: Date.now() }];
       });
     }
   }, [modelTranscript, isConnected]);
@@ -62,11 +91,23 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
   }
 
   const handleSend = async (text: string, files: File[]) => {
+    setError(null);
+    
+    // 1. Sanitize text input
+    const sanitizedText = sanitizeText(text);
+    
     const userParts: any[] = [];
-    if (text) userParts.push({ text });
+    if (sanitizedText) userParts.push({ text: sanitizedText });
 
-    // Process files to base64
+    // 2. Validate and process files
     for (const file of files) {
+      const uploadResult = await uploadFileSecurely(file, "chat_attachments");
+      
+      if (uploadResult.error) {
+        setError(uploadResult.error);
+        return;
+      }
+
       const base64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(",")[1]);
@@ -85,7 +126,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
       });
     }
 
-    if (isConnected && text) {
+    if (isConnected && sanitizedText) {
       // If live, we just send the text as a turn if possible, 
       // but Live API is mostly audio/video. 
       // For now, we'll just add it to messages so the user sees it.
@@ -101,9 +142,6 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
     setMessages((prev) => [...prev, userMessage]);
 
     if (isConnected) {
-      // If live session is active, we don't start a standard streaming response
-      // unless the user explicitly wants to "send" a message to the history.
-      // The Live API handles the "response" via audio/transcription.
       return;
     }
 
@@ -137,6 +175,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
       }
     } catch (error) {
       console.error("Streaming error:", error);
+      setError("Failed to generate response. Please try again.");
     } finally {
       setIsStreaming(false);
     }
@@ -177,6 +216,13 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
         </div>
       </header>
 
+      {error && (
+        <div className="bg-red-500/10 border-b border-red-500/20 p-2 text-center text-xs text-red-400 flex items-center justify-center gap-2">
+          <Info size={12} />
+          {error}
+        </div>
+      )}
+
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 scroll-smooth">
         <div className="max-w-4xl mx-auto w-full">
           {messages.length === 0 && (
@@ -200,7 +246,9 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
         onToggleLive={toggleSession}
         isVideoActive={isVideoActive}
         onToggleVideo={toggleVideo}
-        videoStream={videoStream}
+        videoStream={isScreenActive ? screenStream : videoStream}
+        isScreenActive={isScreenActive}
+        onToggleScreen={toggleScreen}
       />
     </div>
   );
