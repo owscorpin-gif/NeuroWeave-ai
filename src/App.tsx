@@ -4,6 +4,7 @@ import { fetchCsrfToken } from "./utils/csrf";
 import { Dashboard } from "./pages/Dashboard";
 import { Chat } from "./pages/Chat";
 import { MediaStudio } from "./pages/MediaStudio";
+import { AudioLab } from "./pages/AudioLab";
 import { Settings } from "./pages/Settings";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { Agent } from "./types";
@@ -71,7 +72,11 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               className="h-full"
             >
-              <Chat agent={selectedAgent} onBack={() => setActiveTab("dashboard")} />
+              <Chat 
+                agent={selectedAgent} 
+                onBack={() => setActiveTab("dashboard")} 
+                onAgentSelect={handleAgentSelect}
+              />
             </motion.div>
           )}
 
@@ -84,6 +89,18 @@ export default function App() {
               className="h-full"
             >
               <MediaStudio />
+            </motion.div>
+          )}
+
+          {activeTab === "audio" && (
+            <motion.div
+              key="audio"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="h-full"
+            >
+              <AudioLab />
             </motion.div>
           )}
 

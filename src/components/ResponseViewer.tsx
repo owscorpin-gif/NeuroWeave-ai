@@ -1,9 +1,9 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import { Message } from "../types";
-import { Play, Download, Maximize2 } from "lucide-react";
-
+import { Play, Download, Maximize2, Volume2 } from "lucide-react";
 import { InterleavedContent } from "./InterleavedContent";
+import { AudioPlayer } from "./AudioPlayer";
 
 interface ResponseViewerProps {
   message: Message;
@@ -44,6 +44,15 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ message }) => {
                     alt="AI Generated"
                     className="w-full h-auto"
                     referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+
+              {part.inlineData && part.inlineData.mimeType.startsWith("audio/") && (
+                <div className="mt-4">
+                  <AudioPlayer 
+                    src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`} 
+                    mimeType={part.inlineData.mimeType}
                   />
                 </div>
               )}

@@ -1,5 +1,5 @@
 import React from "react";
-import { LayoutDashboard, MessageSquare, Image as ImageIcon, Settings, LogOut, Cpu, Shield } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Image as ImageIcon, Settings, LogOut, Cpu, Shield, Music } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { signOut } from "../firebase";
@@ -19,8 +19,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
   
   const menuItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { id: "chat", icon: MessageSquare, label: "Agents" },
+    { id: "chat", icon: MessageSquare, label: "Neural Chat" },
     { id: "studio", icon: ImageIcon, label: "Media Studio" },
+    { id: "audio", icon: Music, label: "Audio Lab" },
     { id: "settings", icon: Settings, label: "Settings" },
   ];
 

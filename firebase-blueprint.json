@@ -1,59 +1,77 @@
 {
   "entities": {
     "User": {
-      "title": "User Profile",
-      "description": "Stores user information and preferences.",
+      "title": "User",
+      "description": "User profile information",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "description": "Unique identifier for the user." },
-        "displayName": { "type": "string", "description": "User's display name." },
-        "email": { "type": "string", "format": "email", "description": "User's email address." },
-        "photoURL": { "type": "string", "description": "URL to the user's profile picture." },
-        "role": { "type": "string", "enum": ["admin", "user", "developer", "guest"], "description": "User's role for RBAC." },
-        "createdAt": { "type": "string", "format": "date-time", "description": "When the profile was created." }
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin", "developer"] },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email"]
+      "required": ["uid", "email", "role"]
     },
     "Conversation": {
-      "title": "Conversation Session",
-      "description": "Stores chat history between a user and an agent.",
+      "title": "Conversation",
+      "description": "A chat session with an agent",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "userId": { "type": "string" },
         "agentId": { "type": "string" },
         "title": { "type": "string" },
-        "lastMessageAt": { "type": "string", "format": "date-time" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "agentId"]
     },
     "Message": {
-      "title": "Chat Message",
-      "description": "A single message in a conversation.",
+      "title": "Message",
+      "description": "A single message in a conversation",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
         "conversationId": { "type": "string" },
         "role": { "type": "string", "enum": ["user", "model"] },
         "parts": { "type": "array", "items": { "type": "object" } },
-        "timestamp": { "type": "number" }
+        "timestamp": { "type": "string", "format": "date-time" }
       },
-      "required": ["conversationId", "role", "parts", "timestamp"]
+      "required": ["conversationId", "role", "parts"]
+    },
+    "Media": {
+      "title": "Media",
+      "description": "Metadata for generated or uploaded media",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["image", "video", "audio"] },
+        "url": { "type": "string" },
+        "prompt": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "url"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
-      "description": "User profiles."
+      "description": "User profiles"
     },
     "/conversations/{conversationId}": {
       "schema": "Conversation",
-      "description": "Chat sessions."
+      "description": "Chat sessions"
     },
     "/conversations/{conversationId}/messages/{messageId}": {
       "schema": "Message",
-      "description": "Messages within a session."
+      "description": "Messages within a conversation"
+    },
+    "/media/{mediaId}": {
+      "schema": "Media",
+      "description": "Media gallery items"
     }
   }
 }

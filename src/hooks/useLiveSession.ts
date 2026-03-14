@@ -11,6 +11,9 @@ export const useLiveSession = (systemInstruction?: string) => {
   const [modelTranscript, setModelTranscript] = useState("");
   const [isVideoActive, setIsVideoActive] = useState(false);
   const [isScreenActive, setIsScreenActive] = useState(false);
+  const [isRecordingMessage, setIsRecordingMessage] = useState(false);
+  const [volume, setVolume] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   
   const audioProcessor = useRef(new AudioProcessor());
   const sessionRef = useRef<any>(null);
@@ -18,7 +21,20 @@ export const useLiveSession = (systemInstruction?: string) => {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const frameIntervalRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    let interval: number;
+    if (isRecording) {
+      interval = window.setInterval(() => {
+        setVolume(audioProcessor.current.getVolume());
+      }, 100);
+    } else {
+      setVolume(0);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
   const startCamera = async () => {
+    setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: 640, height: 480, frameRate: 10 } 
@@ -26,12 +42,18 @@ export const useLiveSession = (systemInstruction?: string) => {
       videoStreamRef.current = stream;
       setIsVideoActive(true);
       startFrameCapture(stream);
-    } catch (error) {
-      console.error("Failed to start camera:", error);
+    } catch (err: any) {
+      console.error("Failed to start camera:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError("Camera permission denied. Please allow camera access in your browser settings.");
+      } else {
+        setError("Failed to start camera: " + (err.message || "Unknown error"));
+      }
     }
   };
 
   const startScreen = async () => {
+    setError(null);
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ 
         video: { frameRate: 5 } 
@@ -43,8 +65,13 @@ export const useLiveSession = (systemInstruction?: string) => {
       stream.getVideoTracks()[0].onended = () => {
         stopScreen();
       };
-    } catch (error) {
-      console.error("Failed to start screen share:", error);
+    } catch (err: any) {
+      console.error("Failed to start screen share:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError("Screen share permission denied. Please allow screen capture when prompted.");
+      } else {
+        setError("Failed to start screen share: " + (err.message || "Unknown error"));
+      }
     }
   };
 
@@ -185,24 +212,58 @@ export const useLiveSession = (systemInstruction?: string) => {
   }, [systemInstruction]);
 
   const startMic = async () => {
-    setIsRecording(true);
-    await audioProcessor.current.startRecording((base64) => {
-      if (sessionRef.current) {
-        sessionRef.current.sendRealtimeInput({
-          media: { data: base64, mimeType: 'audio/pcm;rate=16000' }
+    setError(null);
+    try {
+      if (!isRecording) {
+        setIsRecording(true);
+        await audioProcessor.current.startRecording((base64) => {
+          if (sessionRef.current && isConnected) {
+            sessionRef.current.sendRealtimeInput({
+              media: { data: base64, mimeType: 'audio/pcm;rate=16000' }
+            });
+          }
         });
       }
-    });
+    } catch (err: any) {
+      console.error("Failed to start microphone:", err);
+      setIsRecording(false);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError("Microphone permission denied. Please allow microphone access in your browser settings.");
+      } else {
+        setError("Failed to start microphone: " + (err.message || "Unknown error"));
+      }
+    }
   };
 
   const stopMic = () => {
     setIsRecording(false);
+    setIsRecordingMessage(false);
     audioProcessor.current.stopRecording();
     audioProcessor.current.stopPlayback();
     if (sessionRef.current) {
       sessionRef.current.close();
       sessionRef.current = null;
     }
+  };
+
+  const startVoiceMessage = async () => {
+    if (!isRecording) {
+      await startMic();
+    }
+    audioProcessor.current.startBuffering();
+    setIsRecordingMessage(true);
+  };
+
+  const stopVoiceMessage = (): File | null => {
+    const blob = audioProcessor.current.stopBuffering();
+    setIsRecordingMessage(false);
+    if (!isConnected) {
+      stopMic();
+    }
+    if (blob) {
+      return new File([blob], `voice_message_${Date.now()}.wav`, { type: 'audio/wav' });
+    }
+    return null;
   };
 
   const toggleSession = () => {
@@ -256,6 +317,12 @@ export const useLiveSession = (systemInstruction?: string) => {
     isScreenActive,
     videoStream: videoStreamRef.current,
     screenStream: screenStreamRef.current,
+    volume,
+    error,
+    isRecordingMessage,
+    startVoiceMessage,
+    stopVoiceMessage,
+    clearError: () => setError(null),
     toggleSession,
     toggleVideo,
     toggleScreen,

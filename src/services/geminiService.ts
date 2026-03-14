@@ -6,7 +6,7 @@ const apiKey = process.env.GEMINI_API_KEY || "";
 
 export const getAI = () => {
   if (!apiKey) {
-    console.warn("GEMINI_API_KEY is not set. AI features may not work.");
+    throw new Error("API_KEY_INVALID: Gemini API key is missing. Please configure it in settings.");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -86,21 +86,31 @@ export const streamMultimodalResponse = async function* (
   }
 };
 
-export const generateImage = async (prompt: string) => {
+export const generateImage = async (prompt: string, imageBase64?: string, aspectRatio: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" = "16:9") => {
   if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
   const ai = getAI();
   const safePrompt = PromptGuard.isMalicious(prompt) 
     ? "A beautiful landscape" 
     : PromptGuard.wrapUserPrompt(prompt);
 
+  const parts: any[] = [{ text: safePrompt }];
+  if (imageBase64) {
+    parts.push({
+      inlineData: {
+        data: imageBase64,
+        mimeType: "image/png"
+      }
+    });
+  }
+
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: {
-      parts: [{ text: safePrompt }],
+      parts,
     },
     config: {
       imageConfig: {
-        aspectRatio: "16:9",
+        aspectRatio,
       },
       safetySettings,
     },
@@ -114,7 +124,12 @@ export const generateImage = async (prompt: string) => {
   return null;
 };
 
-export const generateVideo = async (prompt: string, imageBase64?: string) => {
+export const generateVideo = async (
+  prompt: string, 
+  imageBase64?: string, 
+  aspectRatio: "16:9" | "9:16" = "16:9",
+  onProgress?: (progress: number) => void
+) => {
   if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
   const ai = getAI();
   const safePrompt = PromptGuard.isMalicious(prompt) 
@@ -131,16 +146,72 @@ export const generateVideo = async (prompt: string, imageBase64?: string) => {
     config: {
       numberOfVideos: 1,
       resolution: '720p',
-      aspectRatio: '16:9'
+      aspectRatio
     }
   });
+
+  let progress = 10;
+  if (onProgress) onProgress(progress);
 
   while (!operation.done) {
     await new Promise(resolve => setTimeout(resolve, 5000));
     operation = await ai.operations.getVideosOperation({ operation: operation });
+    
+    // Simulate progress since we don't have a real percentage from the API
+    if (progress < 90) {
+      progress += Math.floor(Math.random() * 10) + 5;
+      if (onProgress) onProgress(Math.min(progress, 95));
+    }
   }
 
-  return operation.response?.generatedVideos?.[0]?.video?.uri;
+  if (onProgress) onProgress(100);
+
+  const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+  if (!downloadLink) return null;
+
+  const videoResponse = await fetch(downloadLink, {
+    method: 'GET',
+    headers: {
+      'x-goog-api-key': apiKey,
+    },
+  });
+
+  if (!videoResponse.ok) {
+    throw new Error(`Failed to fetch video: ${videoResponse.statusText}`);
+  }
+
+  const blob = await videoResponse.blob();
+  return URL.createObjectURL(blob);
+};
+
+export const analyzeAudio = async (audioBase64: string, mimeType: string = "audio/mpeg") => {
+  if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
+  const ai = getAI();
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            inlineData: {
+              data: audioBase64,
+              mimeType,
+            },
+          },
+          {
+            text: "Transcribe this audio and provide a brief summary of its content and tone.",
+          },
+        ],
+      },
+    ],
+    config: {
+      safetySettings,
+    },
+  });
+
+  return response.text;
 };
 
 export const generateSpeech = async (text: string, voiceName: string = 'Kore') => {

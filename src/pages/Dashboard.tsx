@@ -84,7 +84,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
       <section className="mt-20">
         <h3 className="text-2xl font-serif font-bold text-white mb-8">Sample Capabilities</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group">
+          <button 
+            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'live-agent')!)}
+            className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group text-left w-full"
+          >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               <Zap className="text-accent w-6 h-6" />
             </div>
@@ -95,9 +98,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
             <div className="bg-black/40 p-4 rounded-xl font-mono text-xs text-accent/80">
               {"[ ax^2 + bx + c = 0 ] → [ x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a} ]"}
             </div>
-          </div>
+          </button>
 
-          <div className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group">
+          <button 
+            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'global-translator')!)}
+            className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group text-left w-full"
+          >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               <Compass className="text-accent w-6 h-6" />
             </div>
@@ -110,9 +116,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
               <div className="flex-1 h-px bg-white/10" />
               <span className="text-accent">English</span>
             </div>
-          </div>
+          </button>
 
-          <div className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group">
+          <button 
+            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'ui-navigator')!)}
+            className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group text-left w-full"
+          >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               <Monitor className="text-accent w-6 h-6" />
             </div>
@@ -124,9 +133,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
               <div className="flex-1 h-8 bg-white/5 rounded border border-white/10" />
               <div className="w-8 h-8 bg-accent/20 rounded border border-accent/40 animate-pulse" />
             </div>
-          </div>
+          </button>
 
-          <div className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group md:col-span-2">
+          <button 
+            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'creative-storyteller')!)}
+            className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group md:col-span-2 text-left w-full"
+          >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
               <PenTool className="text-accent w-6 h-6" />
             </div>
@@ -139,7 +151,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
               <div className="h-20 bg-accent/10 rounded-lg border border-accent/20 flex items-center justify-center text-[10px] text-accent font-mono">IMAGE</div>
               <div className="h-20 bg-white/5 rounded-lg border border-white/10 flex items-center justify-center text-[10px] text-gray-500 font-mono">AUDIO</div>
             </div>
-          </div>
+          </button>
         </div>
       </section>
 
@@ -150,18 +162,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
           <div className="flex-1 relative z-10">
             <h3 className="text-3xl font-serif font-bold text-white mb-4">Multi-Agent Collaboration</h3>
             <p className="text-gray-400 mb-8 leading-relaxed">
-              Enable multiple agents to work together on complex tasks. Muse can write the story while Aura narrates and Navigator builds the interface.
+              Enable multiple agents to work together on complex tasks. Nexus can orchestrate Muse for visuals, Voyager for UI analysis, and Linguist for global reach.
             </p>
-            <button className="px-8 py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors">
-              Explore Workflows
+            <button 
+              onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'nexus-orchestrator')!)}
+              className="px-8 py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors"
+            >
+              Launch Nexus Orchestrator
             </button>
           </div>
 
           <div className="flex-1 grid grid-cols-2 gap-4 relative z-10">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="aspect-square bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center">
-                <div className="w-12 h-12 rounded-full bg-accent/20 animate-pulse" />
-              </div>
+            {[
+              { id: 'live-agent', icon: Zap },
+              { id: 'creative-storyteller', icon: PenTool },
+              { id: 'ui-navigator', icon: Monitor },
+              { id: 'global-translator', icon: Compass }
+            ].map((item, i) => (
+              <button 
+                key={i} 
+                onClick={() => onAgentSelect(AGENTS.find(a => a.id === item.id)!)}
+                className="aspect-square bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center group hover:border-accent/30 transition-colors"
+              >
+                <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform">
+                   <item.icon className="text-accent w-6 h-6" />
+                </div>
+              </button>
             ))}
           </div>
         </div>

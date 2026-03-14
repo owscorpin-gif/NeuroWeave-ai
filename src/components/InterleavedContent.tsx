@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { generateImage, generateVideo, generateSpeech } from "../services/geminiService";
-import { Play, Loader2, Image as ImageIcon, Video, Volume2 } from "lucide-react";
+import { Play, Loader2, Image as ImageIcon, Video, Volume2, AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
+import { AudioPlayer } from "./AudioPlayer";
 
 interface InterleavedContentProps {
   text: string;
@@ -109,21 +110,26 @@ export const InterleavedContent: React.FC<InterleavedContentProps> = ({ text }) 
               key={i}
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-4 p-4 rounded-2xl bg-accent/5 border border-accent/20"
+              className="w-full"
             >
-              <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent">
-                {media?.loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Volume2 className="w-5 h-5" />}
-              </div>
-              <div className="flex-1">
-                <p className="text-[10px] text-accent font-mono uppercase tracking-wider mb-1">AI Narration</p>
-                {media?.url ? (
-                  <audio src={media.url} controls className="h-8 w-full" />
-                ) : (
-                  <p className="text-xs text-gray-500 italic">
-                    {media?.loading ? "Synthesizing voice..." : media?.error || "Audio pending..."}
-                  </p>
-                )}
-              </div>
+              {media?.loading ? (
+                <div className="flex items-center gap-4 p-4 rounded-2xl bg-accent/5 border border-accent/20">
+                  <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-[10px] text-accent font-mono uppercase tracking-wider mb-1">AI Narration</p>
+                    <p className="text-xs text-gray-500 italic">Synthesizing voice...</p>
+                  </div>
+                </div>
+              ) : media?.url ? (
+                <AudioPlayer src={media.url} mimeType="audio/mp3" />
+              ) : media?.error ? (
+                <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm">
+                  <AlertCircle size={18} />
+                  <span>{media.error}</span>
+                </div>
+              ) : null}
             </motion.div>
           );
         }

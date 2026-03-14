@@ -2,28 +2,111 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Auth UID)
+    // Fields:
+    //   - uid: string (required) - Auth UID
+    //   - email: string (required) - User email
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - role: string (required) - 'user', 'admin', 'developer'
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: conversations
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - agentId: string (required)
+    //   - title: string (optional)
+    //   - lastMessage: string (optional)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: messages
+    // Document ID: auto-generated (subcollection of conversations)
+    // Fields:
+    //   - conversationId: string (required)
+    //   - role: string (required) - 'user', 'model'
+    //   - parts: list (required)
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: media
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - type: string (required) - 'image', 'video', 'audio'
+    //   - url: string (required)
+    //   - prompt: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
     // Helper Functions
     // ===============================================================
+    
     function isAuthenticated() {
       return request.auth != null;
     }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
-    function isDocOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.userId;
-    }
-    function getRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
-    }
+
     function isAdmin() {
-      return isAuthenticated() && (
-        getRole() == 'admin' || 
-        (request.auth.token.email == "shashwat.kesarwani12405@gmail.com" && request.auth.token.email_verified == true)
-      );
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "shashwat.kesarwani12405@gmail.com" && request.auth.token.email_verified == true));
     }
-    function isDeveloper() {
-      return isAuthenticated() && (getRole() == 'developer' || isAdmin());
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
+             (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500)) &&
+             data.role in ['user', 'admin', 'developer'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidConversation(data) {
+      return hasOnlyAllowedFields(['userId', 'agentId', 'title', 'lastMessage', 'updatedAt']) &&
+             data.userId == request.auth.uid &&
+             data.agentId is string && data.agentId.size() < 100 &&
+             (data.title == null || (data.title is string && data.title.size() < 200)) &&
+             (data.lastMessage == null || (data.lastMessage is string && data.lastMessage.size() < 500)) &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return hasOnlyAllowedFields(['conversationId', 'role', 'parts', 'timestamp']) &&
+             data.conversationId is string && data.conversationId.size() < 100 &&
+             data.role in ['user', 'model'] &&
+             data.parts is list && data.parts.size() < 50 &&
+             data.timestamp is timestamp;
+    }
+
+    function isValidMedia(data) {
+      return hasOnlyAllowedFields(['userId', 'type', 'url', 'prompt', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.type in ['image', 'video', 'audio'] &&
+             data.url is string && data.url.size() < 1000 &&
+             (data.prompt == null || (data.prompt is string && data.prompt.size() < 2000)) &&
+             data.createdAt is timestamp;
     }
 
     // ===============================================================
@@ -31,28 +114,33 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      // Only admins can update roles. Users can update their own profile but not their role.
-      allow create: if isOwner(userId) && request.resource.data.role == 'user';
-      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
-      allow delete: if isAdmin();
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
     }
 
     match /conversations/{conversationId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      
+      allow create: if isAuthenticated() && isValidConversation(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidConversation(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && (
-          get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid || 
-          isAdmin()
-        );
-        allow create: if isAuthenticated() && (
-          get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid
-        );
-        allow update, delete: if isAdmin();
+        allow read: if isAuthenticated() && (get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid || isAdmin());
+        allow create: if isAuthenticated() && (get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid) && isValidMessage(request.resource.data);
       }
+    }
+
+    match /media/{mediaId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidMedia(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidMedia(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
     }
   }
 }

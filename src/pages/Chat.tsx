@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Agent, Message, MessagePart } from "../types";
+import { AGENTS } from "../constants";
 import { MultimodalInput } from "../components/MultimodalInput";
 import { ResponseViewer } from "../components/ResponseViewer";
 import { streamMultimodalResponse } from "../services/geminiService";
-import { ChevronLeft, Info, MoreVertical, Trash2, Zap, PenTool, Compass, Mic, Monitor } from "lucide-react";
+import { ChevronLeft, Info, MoreVertical, Trash2, Zap, PenTool, Compass, Mic, Monitor, AlertCircle, MessageSquare } from "lucide-react";
 import { useLiveSession } from "../hooks/useLiveSession";
 import { sanitizeText, validateFile, scanFileForMalware } from "../utils/security";
 import { uploadFileSecurely } from "../services/storageService";
+import { ErrorDisplay } from "../components/ErrorDisplay";
 
 const icons = {
   Zap,
@@ -20,12 +22,13 @@ import { motion, AnimatePresence } from "motion/react";
 interface ChatProps {
   agent: Agent | null;
   onBack: () => void;
+  onAgentSelect: (agent: Agent) => void;
 }
 
-export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
+export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<any>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { 
@@ -40,8 +43,26 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
     isScreenActive, 
     toggleScreen, 
     screenStream, 
-    sendMedia 
+    sendMedia,
+    volume,
+    error: liveError,
+    isRecordingMessage,
+    startVoiceMessage,
+    stopVoiceMessage,
+    clearError: clearLiveError
   } = useLiveSession(agent?.systemInstruction);
+
+  const isLinguist = agent?.id === 'global-translator';
+  const isNexus = agent?.id === 'nexus-orchestrator';
+  const isHighReasoning = agent?.id === 'live-agent' || agent?.id === 'ui-navigator' || isNexus;
+
+  useEffect(() => {
+    if (liveError) {
+      setError(liveError);
+      // Clear it from the hook so it doesn't keep triggering
+      clearLiveError();
+    }
+  }, [liveError, clearLiveError]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -77,15 +98,39 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
 
   if (!agent) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mb-6">
-          <Info className="text-gray-500 w-10 h-10" />
+      <div className="h-full overflow-y-auto p-8 lg:p-12">
+        <div className="max-w-4xl mx-auto">
+          <header className="mb-12 text-center">
+            <div className="w-20 h-20 bg-accent/10 rounded-3xl flex items-center justify-center mb-6 mx-auto">
+              <MessageSquare className="text-accent w-10 h-10" />
+            </div>
+            <h3 className="text-4xl font-serif font-bold text-white mb-4">Neural Chat</h3>
+            <p className="text-gray-400 text-lg max-w-md mx-auto">
+              Select an intelligence to begin a multimodal conversation.
+            </p>
+          </header>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {AGENTS.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => onAgentSelect(a)}
+                className="glass p-6 rounded-2xl border-white/5 hover:border-accent/30 transition-all text-left group"
+              >
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    {React.createElement(icons[a.icon as keyof typeof icons] || Info, { className: "text-accent w-6 h-6" })}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white">{a.name}</h4>
+                    <p className="text-[10px] text-accent font-mono uppercase tracking-widest">{a.type}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">{a.description}</p>
+              </button>
+            ))}
+          </div>
         </div>
-        <h3 className="text-2xl font-serif font-bold text-white mb-2">No Agent Selected</h3>
-        <p className="text-gray-400 mb-8 max-w-md">Please select an intelligence from the dashboard to start a conversation.</p>
-        <button onClick={onBack} className="px-6 py-3 bg-accent text-white rounded-xl font-bold glow-accent">
-          Go to Dashboard
-        </button>
       </div>
     );
   }
@@ -158,13 +203,16 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
       setMessages((prev) => [...prev, modelMessage]);
 
       const stream = streamMultimodalResponse(
-        "gemini-3-flash-preview",
+        isHighReasoning ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview",
         userParts,
         agent.systemInstruction
       );
 
       let fullText = "";
       for await (const chunk of stream) {
+        if (!chunk.text && chunk.candidates?.[0]?.finishReason === 'SAFETY') {
+          throw new Error("RESPONSE_BLOCKED_SAFETY");
+        }
         fullText += chunk.text || "";
         setMessages((prev) => {
           const newMessages = [...prev];
@@ -173,11 +221,27 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
           return newMessages;
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Streaming error:", error);
-      setError("Failed to generate response. Please try again.");
+      setError(error);
+      
+      // Remove the empty model message if it failed immediately
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'model' && last.parts[0].text === "") {
+          return prev.slice(0, -1);
+        }
+        return prev;
+      });
     } finally {
       setIsStreaming(false);
+    }
+  };
+
+  const handleStopRecording = () => {
+    const file = stopVoiceMessage();
+    if (file) {
+      handleSend("", [file]);
     }
   };
 
@@ -217,9 +281,17 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
       </header>
 
       {error && (
-        <div className="bg-red-500/10 border-b border-red-500/20 p-2 text-center text-xs text-red-400 flex items-center justify-center gap-2">
-          <Info size={12} />
-          {error}
+        <div className="p-4 md:px-8 bg-bg">
+          <ErrorDisplay 
+            error={error} 
+            onRetry={() => {
+              const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+              if (lastUserMsg) {
+                const text = lastUserMsg.parts.find(p => p.text)?.text || "";
+                handleSend(text, []);
+              }
+            }} 
+          />
         </div>
       )}
 
@@ -236,6 +308,16 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
           {messages.map((msg) => (
             <ResponseViewer key={msg.id} message={msg} />
           ))}
+          {isStreaming && isNexus && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center gap-3 p-4 bg-accent/5 rounded-2xl border border-accent/10"
+            >
+              <div className="w-2 h-2 bg-accent rounded-full animate-ping" />
+              <span className="text-xs font-mono text-accent uppercase tracking-widest">Nexus is orchestrating sub-agents...</span>
+            </motion.div>
+          )}
         </div>
       </div>
 
@@ -249,6 +331,11 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack }) => {
         videoStream={isScreenActive ? screenStream : videoStream}
         isScreenActive={isScreenActive}
         onToggleScreen={toggleScreen}
+        volume={volume}
+        isLinguist={isLinguist}
+        isRecordingMessage={isRecordingMessage}
+        onStartRecording={startVoiceMessage}
+        onStopRecording={handleStopRecording}
       />
     </div>
   );

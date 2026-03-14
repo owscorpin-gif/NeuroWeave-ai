@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Mic, Image as ImageIcon, Monitor, X, Paperclip, Camera } from "lucide-react";
+import { Send, Mic, Image as ImageIcon, Monitor, X, Paperclip, Camera, AudioLines, StopCircle } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -18,6 +18,11 @@ interface MultimodalInputProps {
   videoStream?: MediaStream | null;
   isScreenActive?: boolean;
   onToggleScreen?: () => void;
+  volume?: number;
+  isLinguist?: boolean;
+  isRecordingMessage?: boolean;
+  onStartRecording?: () => void;
+  onStopRecording?: () => void;
 }
 
 export const MultimodalInput: React.FC<MultimodalInputProps> = ({ 
@@ -29,7 +34,12 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
   onToggleVideo,
   videoStream,
   isScreenActive = false,
-  onToggleScreen
+  onToggleScreen,
+  volume = 0,
+  isLinguist = false,
+  isRecordingMessage = false,
+  onStartRecording,
+  onStopRecording
 }) => {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -145,6 +155,17 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
             <Monitor size={20} />
           </button>
           <button
+            onClick={isRecordingMessage ? onStopRecording : onStartRecording}
+            className={cn(
+              "p-2.5 rounded-xl transition-all relative group",
+              isRecordingMessage ? "bg-red-500 text-white animate-pulse" : "text-gray-400 hover:bg-white/5 hover:text-white"
+            )}
+            title={isRecordingMessage ? "Stop Recording" : "Record Voice Message"}
+            disabled={isLiveActive}
+          >
+            {isRecordingMessage ? <StopCircle size={20} /> : <AudioLines size={20} />}
+          </button>
+          <button
             onClick={onToggleLive}
             className={cn(
               "p-2.5 rounded-xl transition-all relative group",
@@ -177,15 +198,37 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
               handleSend();
             }
           }}
-          placeholder={isLiveActive ? "Listening..." : "Ask NeuroWeave anything..."}
+          placeholder={isLiveActive ? (isLinguist ? "Translating..." : "Listening...") : (isRecordingMessage ? "Recording voice message..." : "Ask NeuroWeave anything...")}
           className="flex-1 bg-transparent border-none focus:ring-0 text-white py-3 px-2 resize-none max-h-40 min-h-[44px] placeholder:text-gray-500"
           rows={1}
-          disabled={isLiveActive}
+          disabled={isLiveActive || isRecordingMessage}
         />
+
+        {(isLiveActive || isRecordingMessage) && (
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full pb-4 flex items-center gap-1">
+            {[...Array(12)].map((_, i) => (
+              <motion.div
+                key={i}
+                animate={{ 
+                  height: (isLiveActive || isRecordingMessage) ? Math.max(4, (volume / 100) * 40 * Math.random()) : 4 
+                }}
+                className="w-1 bg-accent rounded-full"
+              />
+            ))}
+          </div>
+        )}
+        
+        {isLiveActive && isLinguist && (
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[calc(100%+40px)] pb-4">
+            <div className="px-3 py-1.5 bg-accent/20 backdrop-blur-md rounded-full border border-accent/30 text-[10px] text-accent font-mono uppercase tracking-widest">
+              Live Translation Mode
+            </div>
+          </div>
+        )}
 
         <button
           onClick={handleSend}
-          disabled={(!text.trim() && files.length === 0) || isStreaming || isLiveActive}
+          disabled={(!text.trim() && files.length === 0) || isStreaming || isLiveActive || isRecordingMessage}
           className="p-3 rounded-xl bg-accent text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-hover transition-all glow-accent"
         >
           <Send size={20} />

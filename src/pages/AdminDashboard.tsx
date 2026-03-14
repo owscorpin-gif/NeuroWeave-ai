@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useFirebase } from "../context/FirebaseContext";
 import { Shield, Users, MessageSquare, Activity, AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
+import { ErrorDisplay } from "../components/ErrorDisplay";
 
 interface Stats {
   users: number;
@@ -55,9 +56,11 @@ export const AdminDashboard: React.FC = () => {
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-        <AlertCircle size={48} className="text-red-400 mb-4" />
-        <h3 className="text-xl font-bold text-white mb-2">Access Denied</h3>
-        <p className="text-gray-400 max-w-md">{error}</p>
+        <ErrorDisplay 
+          error={error} 
+          onRetry={() => window.location.reload()} 
+          className="max-w-md"
+        />
       </div>
     );
   }
