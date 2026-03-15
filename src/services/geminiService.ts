@@ -86,7 +86,11 @@ export const streamMultimodalResponse = async function* (
   }
 };
 
-export const generateImage = async (prompt: string, imageBase64?: string, aspectRatio: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" = "16:9") => {
+export const generateImage = async (
+  prompt: string, 
+  referenceImages?: { data: string, mimeType: string }[], 
+  aspectRatio: "16:9" | "9:16" | "1:1" | "4:3" | "3:4" = "16:9"
+) => {
   if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
   const ai = getAI();
   const safePrompt = PromptGuard.isMalicious(prompt) 
@@ -94,12 +98,14 @@ export const generateImage = async (prompt: string, imageBase64?: string, aspect
     : PromptGuard.wrapUserPrompt(prompt);
 
   const parts: any[] = [{ text: safePrompt }];
-  if (imageBase64) {
-    parts.push({
-      inlineData: {
-        data: imageBase64,
-        mimeType: "image/png"
-      }
+  if (referenceImages && referenceImages.length > 0) {
+    referenceImages.forEach(img => {
+      parts.push({
+        inlineData: {
+          data: img.data,
+          mimeType: img.mimeType
+        }
+      });
     });
   }
 
@@ -126,9 +132,10 @@ export const generateImage = async (prompt: string, imageBase64?: string, aspect
 
 export const generateVideo = async (
   prompt: string, 
-  imageBase64?: string, 
+  referenceImages?: { data: string, mimeType: string }[], 
   aspectRatio: "16:9" | "9:16" = "16:9",
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  lastFrame?: { data: string, mimeType: string }
 ) => {
   if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
   const ai = getAI();
@@ -136,19 +143,53 @@ export const generateVideo = async (
     ? "A cinematic landscape" 
     : PromptGuard.wrapUserPrompt(prompt);
 
-  let operation = await ai.models.generateVideos({
-    model: 'veo-3.1-fast-generate-preview',
-    prompt: safePrompt,
-    image: imageBase64 ? {
-      imageBytes: imageBase64,
-      mimeType: 'image/png',
-    } : undefined,
-    config: {
-      numberOfVideos: 1,
-      resolution: '720p',
-      aspectRatio
-    }
-  });
+  const model = referenceImages && referenceImages.length > 1 
+    ? 'veo-3.1-generate-preview' 
+    : 'veo-3.1-fast-generate-preview';
+
+  // If multiple images, we must use 16:9 and 720p per instructions
+  const finalAspectRatio = referenceImages && referenceImages.length > 1 ? "16:9" : aspectRatio;
+
+  const config: any = {
+    numberOfVideos: 1,
+    resolution: '720p',
+    aspectRatio: finalAspectRatio,
+    lastFrame: lastFrame ? {
+      imageBytes: lastFrame.data,
+      mimeType: lastFrame.mimeType
+    } : undefined
+  };
+
+  let operation;
+
+  if (referenceImages && referenceImages.length > 1) {
+    const referenceImagesPayload = referenceImages.map(img => ({
+      image: {
+        imageBytes: img.data,
+        mimeType: img.mimeType,
+      },
+      referenceType: "ASSET" as any,
+    }));
+    
+    operation = await ai.models.generateVideos({
+      model,
+      prompt: safePrompt,
+      config: {
+        ...config,
+        referenceImages: referenceImagesPayload,
+      }
+    });
+  } else {
+    operation = await ai.models.generateVideos({
+      model,
+      prompt: safePrompt,
+      image: referenceImages?.[0] ? {
+        imageBytes: referenceImages[0].data,
+        mimeType: referenceImages[0].mimeType,
+      } : undefined,
+      config
+    });
+  }
 
   let progress = 10;
   if (onProgress) onProgress(progress);

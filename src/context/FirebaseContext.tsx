@@ -54,11 +54,20 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export interface AppUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+}
+
 interface FirebaseContextType {
-  user: User | null;
+  user: AppUser | null;
   role: string | null;
   loading: boolean;
   isAuthReady: boolean;
+  login: (name: string, email: string) => void;
+  logout: () => void;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
@@ -66,46 +75,27 @@ const FirebaseContext = createContext<FirebaseContextType>({
   role: null,
   loading: true,
   isAuthReady: false,
+  login: () => {},
+  logout: () => {},
 });
 
 export const useFirebase = () => useContext(FirebaseContext);
 
 export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            setRole(userDoc.data().role);
-          } else {
-            const defaultRole = 'user';
-            await setDoc(doc(db, 'users', user.uid), {
-              uid: user.uid,
-              email: user.email,
-              displayName: user.displayName,
-              photoURL: user.photoURL,
-              role: defaultRole,
-              createdAt: serverTimestamp()
-            });
-            setRole(defaultRole);
-          }
-        } catch (error) {
-          console.error("Error fetching/creating user profile:", error);
-          // Don't throw here to avoid breaking the auth state
-        }
-      } else {
-        setRole(null);
-      }
-      setLoading(false);
-      setIsAuthReady(true);
-    });
+    const savedUser = localStorage.getItem('neuroweave_user');
+    if (savedUser) {
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      setRole('user'); // Default role for all users
+    }
+    setLoading(false);
+    setIsAuthReady(true);
 
     const testConnection = async () => {
       try {
@@ -117,12 +107,28 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     };
     testConnection();
-
-    return () => unsubscribe();
   }, []);
 
+  const login = (name: string, email: string) => {
+    const newUser: AppUser = {
+      uid: `user_${Date.now()}`,
+      email,
+      displayName: name,
+      photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
+    };
+    setUser(newUser);
+    setRole('user');
+    localStorage.setItem('neuroweave_user', JSON.stringify(newUser));
+  };
+
+  const logout = () => {
+    setUser(null);
+    setRole(null);
+    localStorage.removeItem('neuroweave_user');
+  };
+
   return (
-    <FirebaseContext.Provider value={{ user, role, loading, isAuthReady }}>
+    <FirebaseContext.Provider value={{ user, role, loading, isAuthReady, login, logout }}>
       {children}
     </FirebaseContext.Provider>
   );

@@ -2,7 +2,6 @@ import React from "react";
 import { LayoutDashboard, MessageSquare, Image as ImageIcon, Settings, LogOut, Cpu, Shield, Music } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { signOut } from "../firebase";
 import { useFirebase } from "../context/FirebaseContext";
 
 function cn(...inputs: ClassValue[]) {
@@ -15,7 +14,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const { role } = useFirebase();
+  const { role, logout } = useFirebase();
   
   const menuItems = [
     { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -64,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
 
       <div className="p-4 mt-auto border-t border-white/5">
         <button 
-          onClick={() => signOut()}
+          onClick={() => logout()}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-gray-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200"
         >
           <LogOut className="w-5 h-5" />

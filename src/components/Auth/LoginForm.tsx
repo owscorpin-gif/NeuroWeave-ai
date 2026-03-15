@@ -1,58 +1,23 @@
 import React, { useState } from "react";
-import { 
-  signInWithGoogle, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  auth
-} from "../../firebase";
-import { LogIn, Mail, Lock, UserPlus, AlertCircle, ShieldCheck, ArrowRight } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { User, Mail, ShieldCheck, ArrowRight } from "lucide-react";
+import { useFirebase } from "../../context/FirebaseContext";
 
 export const LoginForm: React.FC = () => {
-  const [isSignUp, setIsSignUp] = useState(false);
+  const { login } = useFirebase();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    if (!name.trim() || !email.trim()) return;
+    
     setLoading(true);
-
-    try {
-      if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (err: any) {
-      console.error("FULL AUTH ERROR OBJECT:", err);
-      console.error("ERROR CODE:", err.code);
-      console.error("ERROR MESSAGE:", err.message);
-      
-      if (err.code === 'auth/internal-error' || err.message?.includes('internal-error')) {
-        setError("Firebase Internal Error: This usually means 'Email/Password' is not enabled in the Firebase Console, or the current domain is not in the 'Authorized Domains' list.");
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setError("Invalid email or password.");
-      } else if (err.code === 'auth/network-request-failed') {
-        setError("Network error. Please check your internet connection.");
-      } else {
-        setError(err.message || "Authentication failed.");
-      }
-    } finally {
+    // Simulate a small delay for effect
+    setTimeout(() => {
+      login(name, email);
       setLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError(null);
-    try {
-      await signInWithGoogle();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "An error occurred during Google sign in.");
-    }
+    }, 800);
   };
 
   return (
@@ -66,13 +31,25 @@ export const LoginForm: React.FC = () => {
       </div>
 
       <h2 className="text-3xl font-serif font-bold text-white mb-2">
-        {isSignUp ? "Create Account" : "Welcome Back"}
+        NeuroWeave Identity
       </h2>
       <p className="text-gray-400 mb-8 text-sm">
-        {isSignUp ? "Join the NeuroWeave network" : "Continue your multimodal journey"}
+        Enter your details to access the multimodal network
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4 text-left">
+        <div className="relative">
+          <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Full Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-accent transition-colors"
+            required
+          />
+        </div>
+
         <div className="relative">
           <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
           <input
@@ -85,80 +62,23 @@ export const LoginForm: React.FC = () => {
           />
         </div>
 
-        <div className="relative">
-          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-accent transition-colors"
-            required
-          />
-        </div>
-
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="flex items-start gap-2 text-red-400 text-xs bg-red-400/10 p-3 rounded-lg border border-red-400/20"
-            >
-              <AlertCircle size={14} className="shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !name.trim() || !email.trim()}
           className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover transition-all active:scale-95 disabled:opacity-50 glow-accent"
         >
           {loading ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              <span>{isSignUp ? "Sign Up" : "Sign In"}</span>
+              <span>Initialize Session</span>
               <ArrowRight size={18} />
             </>
           )}
         </button>
       </form>
-
-      <div className="my-8 flex items-center gap-4">
-        <div className="flex-1 h-px bg-white/10" />
-        <span className="text-gray-500 text-xs font-mono">OR</span>
-        <div className="flex-1 h-px bg-white/10" />
-      </div>
-
-      <button
-        onClick={handleGoogleSignIn}
-        className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-all active:scale-95"
-      >
-        <LogIn size={20} />
-        <span>Continue with Google</span>
-      </button>
-
-      <button
-        onClick={() => setIsSignUp(!isSignUp)}
-        className="mt-8 text-sm text-gray-400 hover:text-accent transition-colors flex items-center justify-center gap-2 mx-auto"
-      >
-        {isSignUp ? (
-          <>
-            <LogIn size={16} />
-            <span>Already have an account? Sign In</span>
-          </>
-        ) : (
-          <>
-            <UserPlus size={16} />
-            <span>New here? Create an account</span>
-          </>
-        )}
-      </button>
       
-      <p className="mt-8 text-[10px] text-gray-600 uppercase tracking-[0.3em]">Think. See. Create.</p>
+      <p className="mt-12 text-[10px] text-gray-600 uppercase tracking-[0.3em]">Think. See. Create.</p>
     </div>
   );
 };

@@ -1,6 +1,6 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { generateVideo, generateImage } from "../services/geminiService";
-import { Sparkles, Video, Image as ImageIcon, Wand2, Loader2, Download, AlertCircle, Upload, X, Trash2, Layout } from "lucide-react";
+import { Sparkles, Video, Image as ImageIcon, Wand2, Loader2, Download, AlertCircle, Upload, X, Trash2, Layout, Scissors, Play, Pause, Camera } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { sanitizeText, validateFile } from "../utils/security";
 import { clsx, type ClassValue } from "clsx";
@@ -20,30 +20,170 @@ export const MediaStudio: React.FC = () => {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<any>(null);
   const [generatedMedia, setGeneratedMedia] = useState<{ type: 'image' | 'video', url: string }[]>([]);
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<{ file: File, preview: string }[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<{ file: File, url: string } | null>(null);
+  const [trimRange, setTrimRange] = useState<[number, number]>([0, 10]);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isTrimmed, setIsTrimmed] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const validation = validateFile(file, 5, ["image/jpeg", "image/png"]);
-      if (!validation.valid) {
-        setError(validation.error || "Invalid file");
-        return;
-      }
-      setSelectedImage(file);
-      const reader = new FileReader();
-      reader.onload = () => setImagePreview(reader.result as string);
-      reader.readAsDataURL(file);
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      const videoFile = files.find(f => f.type.startsWith('video/'));
+      const imageFiles = files.filter(f => f.type.startsWith('image/'));
+      
+      if (videoFile) processVideo(videoFile);
+      imageFiles.forEach(file => processFile(file));
     }
   };
 
-  const removeImage = () => {
-    setSelectedImage(null);
-    setImagePreview(null);
+  const processVideo = (file: File) => {
+    const validation = validateFile(file, 50, ["video/mp4", "video/quicktime", "video/webm"]);
+    if (!validation.valid) {
+      setError(validation.error || "Invalid video file");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setSelectedVideo({ file, url });
+    setMode('video');
+  };
+
+  const processFile = (file: File) => {
+    if (selectedImages.length >= 3) {
+      setError("Maximum 3 reference images allowed.");
+      return;
+    }
+    const validation = validateFile(file, 5, ["image/jpeg", "image/png", "image/webp"]);
+    if (!validation.valid) {
+      setError(validation.error || "Invalid file");
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSelectedImages(prev => [
+        ...prev, 
+        { file, preview: reader.result as string }
+      ].slice(0, 3));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      files.forEach(file => processFile(file));
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processVideo(file);
+  };
+
+  const removeVideo = () => {
+    if (selectedVideo) URL.revokeObjectURL(selectedVideo.url);
+    setSelectedVideo(null);
+    setTrimRange([0, 10]);
+    setIsTrimmed(false);
+    if (videoInputRef.current) videoInputRef.current.value = "";
+  };
+
+  const extractFrame = async (time: number): Promise<{ data: string, mimeType: string } | null> => {
+    if (!videoPreviewRef.current) return null;
+    const video = videoPreviewRef.current;
+    
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      
+      const onSeeked = () => {
+        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const data = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        video.removeEventListener('seeked', onSeeked);
+        resolve({ data, mimeType: 'image/jpeg' });
+      };
+      
+      video.addEventListener('seeked', onSeeked);
+      video.currentTime = time;
+    });
+  };
+
+  const handleCaptureFrame = () => {
+    if (!videoPreviewRef.current) return;
+    if (selectedImages.length >= 3) {
+      setError("Maximum 3 reference images allowed.");
+      return;
+    }
+
+    const video = videoPreviewRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `captured_frame_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          setSelectedImages(prev => [
+            ...prev,
+            { file, preview: reader.result as string }
+          ].slice(0, 3));
+        };
+        reader.readAsDataURL(blob);
+      }
+    }, 'image/jpeg', 0.8);
+  };
+
+  // Keep video within trim range during playback
+  useEffect(() => {
+    const video = videoPreviewRef.current;
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+      if (video.currentTime < trimRange[0]) {
+        video.currentTime = trimRange[0];
+      }
+      if (video.currentTime > trimRange[1]) {
+        if (isPlaying) {
+          video.pause();
+          setIsPlaying(false);
+        }
+        video.currentTime = trimRange[0];
+      }
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [trimRange, isPlaying]);
 
   const handleGenerate = async (type: 'image' | 'video') => {
     if (!prompt.trim()) return;
@@ -66,25 +206,38 @@ export const MediaStudio: React.FC = () => {
     // Sanitize prompt
     const sanitizedPrompt = sanitizeText(prompt);
 
-    let imageBase64 = "";
-    if (selectedImage) {
-      imageBase64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.readAsDataURL(selectedImage);
-      });
+    // Prepare reference images
+    const referenceImages = selectedImages.map(img => ({
+      data: img.preview.split(",")[1],
+      mimeType: img.file.type
+    }));
+
+    let firstFrame = null;
+    let lastFrame = null;
+
+    if (selectedVideo && type === 'video') {
+      setProgress(5);
+      firstFrame = await extractFrame(trimRange[0]);
+      lastFrame = await extractFrame(trimRange[1]);
+      if (firstFrame) referenceImages.unshift(firstFrame);
     }
     
     try {
       if (type === 'video') {
         // Veo only supports 16:9 and 9:16
         const videoRatio = aspectRatio === "9:16" ? "9:16" : "16:9";
-        const videoUrl = await generateVideo(sanitizedPrompt, imageBase64, videoRatio, (p) => setProgress(p));
+        const videoUrl = await generateVideo(
+          sanitizedPrompt, 
+          referenceImages, 
+          videoRatio, 
+          (p) => setProgress(p),
+          lastFrame || undefined
+        );
         if (videoUrl) {
           setGeneratedMedia(prev => [{ type: 'video', url: videoUrl }, ...prev]);
         }
       } else {
-        const imageUrl = await generateImage(sanitizedPrompt, imageBase64, aspectRatio);
+        const imageUrl = await generateImage(sanitizedPrompt, referenceImages, aspectRatio);
         if (imageUrl) {
           setGeneratedMedia(prev => [{ type: 'image', url: imageUrl }, ...prev]);
         }
@@ -154,34 +307,219 @@ export const MediaStudio: React.FC = () => {
             </button>
           </div>
 
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the scene for your cinematic video..."}
-            className="w-full bg-transparent border-none focus:ring-0 text-white text-2xl font-serif min-h-[140px] resize-none placeholder:text-gray-700 leading-relaxed"
-          />
+          <div 
+            className={cn(
+              "relative transition-all duration-300",
+              isDragging && "scale-[0.98] opacity-50"
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the scene for your cinematic video..."}
+              className="w-full bg-transparent border-none focus:ring-0 text-white text-2xl font-serif min-h-[140px] resize-none placeholder:text-gray-700 leading-relaxed"
+            />
+            
+            {isDragging && (
+              <div className="absolute inset-0 flex items-center justify-center bg-accent/10 border-2 border-dashed border-accent rounded-2xl pointer-events-none">
+                <div className="flex flex-col items-center gap-2 text-accent">
+                  <Upload size={32} className="animate-bounce" />
+                  <span className="font-mono text-xs uppercase tracking-widest">Drop Reference Image</span>
+                </div>
+              </div>
+            )}
+          </div>
 
           <AnimatePresence>
-            {imagePreview && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                className="relative w-40 h-40 mb-6 group"
+            {selectedVideo && mode === 'video' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="mb-8 glass p-6 rounded-3xl border-accent/20"
               >
-                <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-2xl border border-white/10 shadow-2xl" />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center">
-                  <button 
-                    onClick={removeImage}
-                    className="p-2 bg-red-500 text-white rounded-full hover:scale-110 transition-transform"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-accent font-mono text-[10px] uppercase tracking-widest">
+                    <Scissors size={14} />
+                    <span>Video Trimmer {isTrimmed && "(Applied)"}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {!isTrimmed ? (
+                      <button 
+                        onClick={() => setIsTrimmed(true)}
+                        className="text-[10px] uppercase tracking-widest font-bold text-accent hover:text-accent-light transition-colors"
+                      >
+                        Apply Trim
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => setIsTrimmed(false)}
+                        className="text-[10px] uppercase tracking-widest font-bold text-gray-500 hover:text-white transition-colors"
+                      >
+                        Edit Trim
+                      </button>
+                    )}
+                    <button onClick={removeVideo} className="text-gray-500 hover:text-white transition-colors">
+                      <X size={16} />
+                    </button>
+                  </div>
                 </div>
-                <div className="absolute -bottom-2 -left-2 px-2 py-1 bg-accent text-white text-[8px] font-mono uppercase tracking-widest rounded shadow-lg">
-                  Reference Active
+
+                <div className={cn(
+                  "relative aspect-video rounded-2xl overflow-hidden bg-black mb-6 group transition-all duration-500",
+                  isTrimmed ? "ring-2 ring-accent ring-offset-4 ring-offset-black/50" : "ring-0"
+                )}>
+                  <video
+                    ref={videoPreviewRef}
+                    src={selectedVideo.url}
+                    className="w-full h-full object-contain"
+                    onLoadedMetadata={(e) => {
+                      const duration = e.currentTarget.duration;
+                      setVideoDuration(duration);
+                      setTrimRange([0, Math.min(duration, 10)]);
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity gap-4">
+                    <button 
+                      onClick={() => {
+                        if (videoPreviewRef.current) {
+                          if (isPlaying) videoPreviewRef.current.pause();
+                          else {
+                            if (videoPreviewRef.current.currentTime >= trimRange[1]) {
+                              videoPreviewRef.current.currentTime = trimRange[0];
+                            }
+                            videoPreviewRef.current.play();
+                          }
+                          setIsPlaying(!isPlaying);
+                        }
+                      }}
+                      className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center text-white border border-white/20 hover:bg-white/20 transition-all"
+                    >
+                      {isPlaying ? <Pause size={32} /> : <Play size={32} className="ml-1" />}
+                    </button>
+                    
+                    <button 
+                      onClick={handleCaptureFrame}
+                      className="w-16 h-16 rounded-full bg-accent/20 backdrop-blur-md flex items-center justify-center text-accent border border-accent/20 hover:bg-accent/30 transition-all"
+                      title="Capture Current Frame as Reference"
+                    >
+                      <Camera size={32} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between text-[10px] font-mono text-gray-500 uppercase tracking-widest">
+                    <span>Start: {trimRange[0].toFixed(1)}s</span>
+                    <span className="text-accent">Duration: {(trimRange[1] - trimRange[0]).toFixed(1)}s</span>
+                    <span>End: {trimRange[1].toFixed(1)}s</span>
+                  </div>
+                  
+                  <div className="relative h-16 flex items-center px-2 bg-white/5 rounded-xl border border-white/10">
+                    {/* Timeline Ticks */}
+                    <div className="absolute inset-x-4 inset-y-0 flex justify-between items-center pointer-events-none opacity-20">
+                      {Array.from({ length: 20 }).map((_, i) => (
+                        <div key={i} className={cn("w-px bg-white", i % 5 === 0 ? "h-3" : "h-1.5")} />
+                      ))}
+                    </div>
+
+                    <div className="absolute inset-x-2 h-2 bg-white/5 rounded-full overflow-hidden">
+                      <div 
+                        className="absolute h-full bg-accent/40"
+                        style={{ 
+                          left: `${(trimRange[0] / videoDuration) * 100}%`,
+                          width: `${((trimRange[1] - trimRange[0]) / videoDuration) * 100}%`
+                        }}
+                      />
+                    </div>
+
+                    {/* Playhead */}
+                    <div 
+                      className="absolute h-12 w-0.5 bg-white z-30 pointer-events-none transition-all duration-75"
+                      style={{ left: `${(currentTime / videoDuration) * 100}%` }}
+                    >
+                      <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white rounded-full shadow-lg" />
+                    </div>
+
+                    {/* Start Marker (Bracket) */}
+                    <div 
+                      className="absolute h-10 w-4 border-l-2 border-t-2 border-b-2 border-white z-10 pointer-events-none rounded-l-md"
+                      style={{ left: `${(trimRange[0] / videoDuration) * 100}%` }}
+                    >
+                      <div className="absolute -top-6 left-0 text-[9px] font-mono text-white font-bold uppercase tracking-tighter">Start</div>
+                    </div>
+
+                    {/* End Marker (Bracket) */}
+                    <div 
+                      className="absolute h-10 w-4 border-r-2 border-t-2 border-b-2 border-accent z-10 pointer-events-none rounded-r-md"
+                      style={{ left: `calc(${(trimRange[1] / videoDuration) * 100}% - 16px)` }}
+                    >
+                      <div className="absolute -top-6 right-0 text-[9px] font-mono text-accent font-bold uppercase tracking-tighter">End</div>
+                    </div>
+
+                    <input
+                      type="range"
+                      min={0}
+                      max={videoDuration}
+                      step={0.01}
+                      value={trimRange[0]}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setTrimRange([Math.min(val, trimRange[1] - 0.5), trimRange[1]]);
+                        if (videoPreviewRef.current) videoPreviewRef.current.currentTime = val;
+                      }}
+                      className="absolute inset-x-0 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-accent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-xl z-20"
+                    />
+                    <input
+                      type="range"
+                      min={0}
+                      max={videoDuration}
+                      step={0.01}
+                      value={trimRange[1]}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setTrimRange([trimRange[0], Math.max(val, trimRange[0] + 0.5)]);
+                        if (videoPreviewRef.current) videoPreviewRef.current.currentTime = val;
+                      }}
+                      className="absolute inset-x-0 appearance-none bg-transparent pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-xl z-20"
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-600 text-center font-mono">
+                    The AI will use the first and last frames of your selection as visual anchors.
+                  </p>
                 </div>
               </motion.div>
+            )}
+
+            {selectedImages.length > 0 && (
+              <div className="flex flex-wrap gap-4 mb-6">
+                {selectedImages.map((img, index) => (
+                  <motion.div 
+                    key={index}
+                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                    className="relative w-32 h-32 group"
+                  >
+                    <img src={img.preview} alt={`Preview ${index}`} className="w-full h-full object-cover rounded-2xl border border-white/10 shadow-2xl" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl flex items-center justify-center gap-2">
+                      <button 
+                        onClick={() => removeImage(index)}
+                        className="p-2 bg-red-500 text-white rounded-full hover:scale-110 transition-transform"
+                        title="Remove Image"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                    <div className="absolute -top-2 -right-2 w-5 h-5 bg-accent text-white text-[10px] flex items-center justify-center rounded-full font-bold shadow-lg">
+                      {index + 1}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             )}
           </AnimatePresence>
           
@@ -192,17 +530,35 @@ export const MediaStudio: React.FC = () => {
                 ref={fileInputRef} 
                 onChange={handleImageSelect} 
                 accept="image/*" 
+                multiple
                 className="hidden" 
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl transition-all text-xs font-mono uppercase tracking-widest"
+                disabled={selectedImages.length >= 3}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl transition-all text-xs font-mono uppercase tracking-widest disabled:opacity-30"
               >
                 <Upload size={14} />
-                <span>Reference</span>
+                <span>{selectedImages.length > 0 ? `Add Reference (${selectedImages.length}/3)` : "Reference"}</span>
               </button>
               
-              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
+              <input 
+                type="file" 
+                ref={videoInputRef} 
+                onChange={handleVideoSelect} 
+                accept="video/mp4,video/quicktime,video/webm" 
+                className="hidden" 
+              />
+              <button
+                onClick={() => videoInputRef.current?.click()}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all text-xs font-mono uppercase tracking-widest",
+                  selectedVideo ? "bg-accent/20 text-accent border border-accent/30" : "bg-white/5 hover:bg-white/10 text-gray-400 border border-transparent"
+                )}
+              >
+                <Video size={14} />
+                <span>{selectedVideo ? "Video Loaded" : "Video Reference"}</span>
+              </button>
                 {(["16:9", "9:16", "1:1", "4:3", "3:4"] as const).map((ratio) => (
                   <button
                     key={ratio}
@@ -312,6 +668,5 @@ export const MediaStudio: React.FC = () => {
           </AnimatePresence>
         </div>
       </div>
-    </div>
   );
 };

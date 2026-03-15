@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, Play, Download, Loader2, Music, Volume2, Trash2, AlertCircle, Sparkles, Clock, Upload, FileAudio, Search, FileText } from "lucide-react";
+import { Mic, Play, Download, Loader2, Music, Volume2, Trash2, AlertCircle, Sparkles, Clock, Upload, FileAudio, Search, FileText, Copy, Check } from "lucide-react";
 import { generateSpeech, analyzeAudio } from "../services/geminiService";
 import { motion, AnimatePresence } from "motion/react";
 import { sanitizeText, validateFile } from "../utils/security";
@@ -32,6 +32,8 @@ export const AudioLab: React.FC = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isSpeakingAnalysis, setIsSpeakingAnalysis] = useState(false);
   const [analysisAudioUrl, setAnalysisAudioUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textFileInputRef = useRef<HTMLInputElement>(null);
   const analysisAudioRef = useRef<HTMLAudioElement>(null);
@@ -73,16 +75,38 @@ export const AudioLab: React.FC = () => {
     }
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processAudioFile(file);
+    }
+  };
+
+  const processAudioFile = (file: File) => {
+    const validation = validateFile(file, 10, ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp3"]);
+    if (!validation.valid) {
+      setError(validation.error || "Invalid file type");
+      return;
+    }
+    setSelectedFile(file);
+    setError(null);
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const validation = validateFile(file, 10, ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp3"]);
-      if (!validation.valid) {
-        setError(validation.error || "Invalid file type");
-        return;
-      }
-      setSelectedFile(file);
-      setError(null);
+      processAudioFile(file);
     }
   };
 
@@ -140,6 +164,20 @@ export const AudioLab: React.FC = () => {
     } finally {
       setIsSpeakingAnalysis(false);
     }
+  };
+
+  const handleCopyAnalysis = () => {
+    if (!analysisResult) return;
+    navigator.clipboard.writeText(analysisResult);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleClearAnalysis = () => {
+    setSelectedFile(null);
+    setAnalysisResult(null);
+    setAnalysisAudioUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleTextFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,8 +355,12 @@ export const AudioLab: React.FC = () => {
                 </label>
                 <div 
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                   className={cn(
                     "border-2 border-dashed rounded-3xl p-12 flex flex-col items-center justify-center cursor-pointer transition-all",
+                    isDragging ? "border-accent bg-accent/10 scale-[1.02]" : 
                     selectedFile ? "border-accent bg-accent/5" : "border-white/10 hover:border-white/20 bg-white/5"
                   )}
                 >
@@ -326,7 +368,7 @@ export const AudioLab: React.FC = () => {
                     type="file" 
                     ref={fileInputRef} 
                     onChange={handleFileSelect} 
-                    accept="audio/*" 
+                    accept=".mp3,.wav,.ogg,audio/mpeg,audio/wav,audio/ogg" 
                     className="hidden" 
                   />
                   {selectedFile ? (
@@ -357,6 +399,14 @@ export const AudioLab: React.FC = () => {
                         <audio ref={analysisAudioRef} src={analysisAudioUrl} className="hidden" />
                       )}
                       <button
+                        onClick={handleCopyAnalysis}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 rounded-lg text-[10px] font-bold transition-all"
+                        title="Copy to Clipboard"
+                      >
+                        {copied ? <Check size={12} className="text-accent" /> : <Copy size={12} />}
+                        {copied ? "COPIED" : "COPY"}
+                      </button>
+                      <button
                         onClick={handleSpeakAnalysis}
                         disabled={isSpeakingAnalysis}
                         className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-[10px] font-bold transition-all disabled:opacity-50"
@@ -376,7 +426,14 @@ export const AudioLab: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex items-center justify-end">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={handleClearAnalysis}
+                  className="text-xs text-gray-500 hover:text-white transition-colors flex items-center gap-1"
+                >
+                  <Trash2 size={14} />
+                  Clear Analysis
+                </button>
                 <button
                   onClick={handleAnalyze}
                   disabled={isAnalyzing || !selectedFile}

@@ -1,5 +1,6 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
+import { motion } from "motion/react";
 import { Message } from "../types";
 import { Play, Download, Maximize2, Volume2 } from "lucide-react";
 import { InterleavedContent } from "./InterleavedContent";
@@ -7,9 +8,10 @@ import { AudioPlayer } from "./AudioPlayer";
 
 interface ResponseViewerProps {
   message: Message;
+  isStreaming?: boolean;
 }
 
-export const ResponseViewer: React.FC<ResponseViewerProps> = ({ message }) => {
+export const ResponseViewer: React.FC<ResponseViewerProps> = ({ message, isStreaming = false }) => {
   const isModel = message.role === "model";
 
   return (
@@ -22,15 +24,27 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ message }) => {
           <span className="text-xs text-gray-500 font-mono">
             {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
+          {isStreaming && isModel && (
+            <span className="flex h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+          )}
         </div>
 
         <div className={`space-y-4 ${isModel ? "" : "flex flex-col items-end"}`}>
           {message.parts.map((part, i) => (
-            <div key={i} className="w-full">
+            <div key={i} className="w-full relative">
               {part.text && (
                 <div className={`prose prose-invert max-w-none ${isModel ? "text-gray-200" : "bg-accent/10 text-accent p-4 rounded-2xl border border-accent/20"}`}>
                   {isModel ? (
-                    <InterleavedContent text={part.text} />
+                    <div className="relative">
+                      <InterleavedContent text={part.text} />
+                      {isStreaming && i === message.parts.length - 1 && (
+                        <motion.span
+                          animate={{ opacity: [1, 0] }}
+                          transition={{ duration: 0.8, repeat: Infinity }}
+                          className="inline-block w-1.5 h-4 bg-accent ml-1 align-middle"
+                        />
+                      )}
+                    </div>
                   ) : (
                     <ReactMarkdown>{part.text}</ReactMarkdown>
                   )}

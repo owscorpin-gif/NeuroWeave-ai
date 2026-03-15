@@ -121,7 +121,11 @@ export const validateFile = (file: File, maxSizeMB: number = 5, allowedTypes: st
   }
   
   if (!allowedTypes.includes(file.type)) {
-    return { valid: false, error: "Unsupported file type. Only JPG, PNG, and PDF are allowed." };
+    const typesList = allowedTypes.map(t => {
+      const ext = t.split('/')[1].toUpperCase();
+      return ext === 'QUICKTIME' ? 'MOV' : ext;
+    }).join(", ");
+    return { valid: false, error: `Unsupported file type. Allowed types: ${typesList}` };
   }
   
   return { valid: true };

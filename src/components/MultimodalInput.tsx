@@ -43,8 +43,23 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
 }) => {
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<{ url: string, type: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    // Generate previews
+    const newPreviews = files.map(file => ({
+      url: URL.createObjectURL(file),
+      type: file.type
+    }));
+    setPreviews(newPreviews);
+
+    // Cleanup
+    return () => {
+      newPreviews.forEach(p => URL.revokeObjectURL(p.url));
+    };
+  }, [files]);
 
   useEffect(() => {
     if (videoRef.current && videoStream) {
@@ -62,12 +77,17 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+      const newFiles = Array.from(e.target.files);
+      setFiles(prev => [...prev, ...newFiles]);
     }
   };
 
   const removeFile = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearFiles = () => {
+    setFiles([]);
   };
 
   return (
@@ -78,7 +98,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide items-end"
+            className="flex gap-3 mb-4 overflow-x-auto pb-2 scrollbar-hide items-end"
           >
             {(isVideoActive || isScreenActive) && (
               <div className="relative group flex-shrink-0">
@@ -99,25 +119,46 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
                 </div>
               </div>
             )}
-            {files.map((file, i) => (
-              <div key={i} className="relative group flex-shrink-0">
-                <div className="w-16 h-16 rounded-xl bg-surface border border-white/10 overflow-hidden">
-                  {file.type.startsWith("image/") ? (
-                    <img src={URL.createObjectURL(file)} alt="preview" className="w-full h-full object-cover" />
+            {previews.map((preview, i) => (
+              <motion.div 
+                key={i} 
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="relative group flex-shrink-0"
+              >
+                <div className="w-20 h-20 rounded-xl bg-surface border border-white/10 overflow-hidden shadow-lg">
+                  {preview.type.startsWith("image/") ? (
+                    <img src={preview.url} alt="preview" className="w-full h-full object-cover" />
+                  ) : preview.type.startsWith("video/") ? (
+                    <div className="w-full h-full bg-black flex items-center justify-center relative">
+                      <Monitor className="text-accent w-8 h-8 opacity-50" />
+                      <div className="absolute bottom-1 right-1 px-1 bg-black/60 rounded text-[8px] text-white font-mono">VIDEO</div>
+                    </div>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
+                    <div className="w-full h-full flex items-center justify-center bg-white/5">
                       <Paperclip className="text-gray-500 w-6 h-6" />
                     </div>
                   )}
                 </div>
                 <button
                   onClick={() => removeFile(i)}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg hover:scale-110 transition-transform z-10"
                 >
                   <X size={12} />
                 </button>
-              </div>
+                <div className="absolute -bottom-1 -left-1 w-4 h-4 bg-accent text-white text-[8px] flex items-center justify-center rounded-full font-bold shadow-md">
+                  {i + 1}
+                </div>
+              </motion.div>
             ))}
+            {files.length > 1 && (
+              <button
+                onClick={clearFiles}
+                className="flex-shrink-0 mb-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-[10px] font-mono uppercase tracking-widest rounded-lg border border-red-500/20 transition-all"
+              >
+                Clear All
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -158,12 +199,22 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
             onClick={isRecordingMessage ? onStopRecording : onStartRecording}
             className={cn(
               "p-2.5 rounded-xl transition-all relative group",
-              isRecordingMessage ? "bg-red-500 text-white animate-pulse" : "text-gray-400 hover:bg-white/5 hover:text-white"
+              isRecordingMessage ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]" : "text-gray-400 hover:bg-white/5 hover:text-white"
             )}
             title={isRecordingMessage ? "Stop Recording" : "Record Voice Message"}
-            disabled={isLiveActive}
           >
-            {isRecordingMessage ? <StopCircle size={20} /> : <AudioLines size={20} />}
+            {isRecordingMessage ? (
+              <StopCircle size={20} className="animate-pulse" />
+            ) : (
+              <Mic size={20} />
+            )}
+            {isRecordingMessage && (
+              <div className="absolute -top-1 -right-1 flex gap-0.5">
+                <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1 h-1 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            )}
           </button>
           <button
             onClick={onToggleLive}
@@ -173,7 +224,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
             )}
             title={isLiveActive ? "Stop Voice Session" : "Start Voice Session"}
           >
-            <Mic size={20} />
+            <AudioLines size={20} className={cn(isLiveActive && "animate-pulse")} />
             {isLiveActive && (
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-ping" />
             )}
@@ -205,16 +256,28 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
         />
 
         {(isLiveActive || isRecordingMessage) && (
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full pb-4 flex items-center gap-1">
-            {[...Array(12)].map((_, i) => (
-              <motion.div
-                key={i}
-                animate={{ 
-                  height: (isLiveActive || isRecordingMessage) ? Math.max(4, (volume / 100) * 40 * Math.random()) : 4 
-                }}
-                className="w-1 bg-accent rounded-full"
-              />
-            ))}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full pb-6 flex items-center gap-1.5 px-4 py-2 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 mb-2">
+            <div className={cn(
+              "w-2 h-2 rounded-full animate-pulse mr-2",
+              isRecordingMessage ? "bg-red-500" : "bg-accent"
+            )} />
+            <div className="flex items-center gap-1 h-6">
+              {[...Array(16)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  animate={{ 
+                    height: (isLiveActive || isRecordingMessage) ? Math.max(4, (volume / 100) * 24 * (0.5 + Math.random() * 0.5)) : 4 
+                  }}
+                  className={cn(
+                    "w-1 rounded-full transition-colors duration-300",
+                    isRecordingMessage ? "bg-red-500/60" : "bg-accent/60"
+                  )}
+                />
+              ))}
+            </div>
+            <span className="ml-2 text-[10px] font-mono text-white/60 uppercase tracking-widest">
+              {isRecordingMessage ? "Recording" : "Live"}
+            </span>
           </div>
         )}
         

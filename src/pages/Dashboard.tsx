@@ -18,10 +18,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
     const fetchLogs = async () => {
       if (role === 'developer' || role === 'admin') {
         try {
-          const token = await user?.getIdToken();
-          const response = await fetch("/api/dev/logs", {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          const response = await fetch("/api/dev/logs");
           if (response.ok) {
             const data = await response.json();
             setLogs(data.logs);

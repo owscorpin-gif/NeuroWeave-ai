@@ -212,18 +212,51 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
       );
 
       let fullText = "";
+      let displayedText = "";
+      const tokenQueue: string[] = [];
+      let isTyping = true;
+
+      const typeNextToken = () => {
+        if (tokenQueue.length > 0) {
+          const token = tokenQueue.shift()!;
+          displayedText += token;
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            if (lastMessage && lastMessage.role === 'model') {
+              lastMessage.parts[0].text = displayedText;
+            }
+            return newMessages;
+          });
+          
+          // Adjust speed based on queue length to catch up if needed
+          const delay = Math.max(10, 30 - (tokenQueue.length * 2));
+          setTimeout(typeNextToken, delay);
+        } else if (isTyping) {
+          setTimeout(typeNextToken, 50);
+        }
+      };
+
+      typeNextToken();
+
       for await (const chunk of stream) {
         if (!chunk.text && chunk.candidates?.[0]?.finishReason === 'SAFETY') {
+          isTyping = false;
           throw new Error("RESPONSE_BLOCKED_SAFETY");
         }
-        fullText += chunk.text || "";
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          const lastMessage = newMessages[newMessages.length - 1];
-          lastMessage.parts[0].text = fullText;
-          return newMessages;
-        });
+        
+        const chunkText = chunk.text || "";
+        fullText += chunkText;
+        
+        // Split by characters to simulate token-by-token if chunks are large
+        // or just push the whole chunk if it's small. 
+        // Pushing characters gives the smoothest feel.
+        for (const char of chunkText) {
+          tokenQueue.push(char);
+        }
       }
+      
+      isTyping = false;
     } catch (error: any) {
       console.error("Streaming error:", error);
       setError(error);
@@ -316,8 +349,12 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
               <p className="text-gray-400 font-mono text-sm">Start a new session with {agent.name}</p>
             </div>
           )}
-          {messages.map((msg) => (
-            <ResponseViewer key={msg.id} message={msg} />
+          {messages.map((msg, idx) => (
+            <ResponseViewer 
+              key={msg.id} 
+              message={msg} 
+              isStreaming={isStreaming && idx === messages.length - 1 && msg.role === 'model'} 
+            />
           ))}
           {isStreaming && isNexus && (
             <motion.div 

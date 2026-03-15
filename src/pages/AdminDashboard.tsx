@@ -21,12 +21,7 @@ export const AdminDashboard: React.FC = () => {
       if (!user) return;
       
       try {
-        const token = await user.getIdToken();
-        const response = await fetch("/api/admin/stats", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await fetch("/api/admin/stats");
         
         if (!response.ok) {
           throw new Error("Failed to fetch admin stats");
