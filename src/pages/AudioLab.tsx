@@ -30,7 +30,11 @@ export const AudioLab: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isSpeakingAnalysis, setIsSpeakingAnalysis] = useState(false);
+  const [analysisAudioUrl, setAnalysisAudioUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textFileInputRef = useRef<HTMLInputElement>(null);
+  const analysisAudioRef = useRef<HTMLAudioElement>(null);
 
   const [generatedAudio, setGeneratedAudio] = useState<{ text: string, voice: string, url: string, id: string, timestamp: number }[]>(() => {
     const saved = localStorage.getItem("neuroweave_audio_history");
@@ -110,6 +114,46 @@ export const AudioLab: React.FC = () => {
     setShowClearConfirm(false);
   };
 
+  const handleSpeakAnalysis = async () => {
+    if (!analysisResult) return;
+    setError(null);
+    setIsSpeakingAnalysis(true);
+
+    try {
+      // Strip markdown for better TTS
+      const plainText = analysisResult.replace(/[#*`_~]/g, '').slice(0, 5000);
+      const base64Audio = await generateSpeech(plainText, selectedVoice);
+      
+      if (base64Audio) {
+        const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
+        setAnalysisAudioUrl(audioUrl);
+        // Play it automatically after state update
+        setTimeout(() => {
+          if (analysisAudioRef.current) {
+            analysisAudioRef.current.play();
+          }
+        }, 100);
+      }
+    } catch (err: any) {
+      console.error("Speak analysis error:", err);
+      setError(err);
+    } finally {
+      setIsSpeakingAnalysis(false);
+    }
+  };
+
+  const handleTextFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setText(content);
+      };
+      reader.readAsText(file);
+    }
+  };
+
   const downloadAudio = (url: string, filename: string) => {
     const link = document.createElement('a');
     link.href = url;
@@ -174,9 +218,25 @@ export const AudioLab: React.FC = () => {
               )}
 
               <div className="mb-8">
-                <label className="block text-gray-500 font-mono text-[10px] uppercase tracking-widest mb-4">
-                  Select Voice Persona
-                </label>
+                <div className="flex items-center justify-between mb-4">
+                  <label className="block text-gray-500 font-mono text-[10px] uppercase tracking-widest">
+                    Select Voice Persona
+                  </label>
+                  <button 
+                    onClick={() => textFileInputRef.current?.click()}
+                    className="text-[10px] font-mono text-accent hover:underline flex items-center gap-1"
+                  >
+                    <Upload size={10} />
+                    Upload Text File
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={textFileInputRef} 
+                    onChange={handleTextFileUpload} 
+                    accept=".txt,.md" 
+                    className="hidden" 
+                  />
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                   {VOICES.map((voice) => (
                     <button
@@ -287,9 +347,28 @@ export const AudioLab: React.FC = () => {
 
               {analysisResult && (
                 <div className="mb-8 p-6 bg-white/5 rounded-2xl border border-white/10">
-                  <div className="flex items-center gap-2 text-accent font-mono text-[10px] uppercase tracking-widest mb-4">
-                    <FileText size={14} />
-                    <span>Analysis Result</span>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-accent font-mono text-[10px] uppercase tracking-widest">
+                      <FileText size={14} />
+                      <span>Analysis Result</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {analysisAudioUrl && (
+                        <audio ref={analysisAudioRef} src={analysisAudioUrl} className="hidden" />
+                      )}
+                      <button
+                        onClick={handleSpeakAnalysis}
+                        disabled={isSpeakingAnalysis}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-[10px] font-bold transition-all disabled:opacity-50"
+                      >
+                        {isSpeakingAnalysis ? (
+                          <Loader2 size={12} className="animate-spin" />
+                        ) : (
+                          <Volume2 size={12} />
+                        )}
+                        {isSpeakingAnalysis ? "SYNTHESIZING..." : "SPEAK RESULT"}
+                      </button>
+                    </div>
                   </div>
                   <div className="prose prose-invert max-w-none text-gray-300 text-sm leading-relaxed">
                     <Markdown>{analysisResult}</Markdown>

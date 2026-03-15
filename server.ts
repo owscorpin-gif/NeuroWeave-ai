@@ -36,12 +36,13 @@ async function startServer() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://generativelanguage.googleapis.com", "https://*.firebasejs.com", "https://*.googleapis.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://generativelanguage.googleapis.com", "https://*.firebasejs.com", "https://*.googleapis.com", "https://apis.google.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:", "blob:", "https://picsum.photos", "https://*.googleusercontent.com", "https://*.googleapis.com"],
-        connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "https://*.googleapis.com", "https://*.firebaseio.com", "wss://*.googleapis.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://picsum.photos", "https://*.googleusercontent.com", "https://*.googleapis.com", "https://*.firebaseapp.com"],
+        connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "https://*.googleapis.com", "https://*.firebaseio.com", "wss://*.googleapis.com", "https://*.firebaseapp.com"],
         mediaSrc: ["'self'", "data:", "blob:", "https://*.googleusercontent.com"],
+        frameSrc: ["'self'", "https://*.firebaseapp.com", "https://*.googleapis.com", "https://*.firebasejs.com"],
         frameAncestors: ["'self'", "https://*.google.com", "https://*.googleusercontent.com", "https://*.run.app"],
       },
     },

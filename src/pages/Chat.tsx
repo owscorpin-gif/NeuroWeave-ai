@@ -192,6 +192,9 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
 
     setIsStreaming(true);
 
+    const hasImages = userParts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/'));
+    const effectiveModel = (isHighReasoning || hasImages) ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview";
+
     try {
       const modelMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -203,7 +206,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
       setMessages((prev) => [...prev, modelMessage]);
 
       const stream = streamMultimodalResponse(
-        isHighReasoning ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview",
+        effectiveModel,
         userParts,
         agent.systemInstruction
       );
@@ -257,7 +260,15 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
               <span className="text-accent font-bold">{agent.name[0]}</span>
             </div>
             <div>
-              <h3 className="font-bold text-white leading-tight">{agent.name}</h3>
+              <h3 className="font-bold text-white leading-tight flex items-center gap-2">
+                {agent.name}
+                {(isHighReasoning || messages.some(m => m.role === 'user' && m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')))) && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/20 text-[10px] text-accent font-mono uppercase tracking-wider animate-pulse">
+                    <Zap size={10} />
+                    Deep Reasoning Active
+                  </span>
+                )}
+              </h3>
               <div className="flex items-center gap-2">
                 <p className="text-[10px] text-accent font-mono uppercase tracking-wider">
                   {isConnected ? "Live Session Active" : `Active • ${agent.type}`}

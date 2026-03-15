@@ -10,7 +10,9 @@ import {
   multiFactor,
   PhoneAuthProvider,
   PhoneMultiFactorGenerator,
-  RecaptchaVerifier
+  RecaptchaVerifier,
+  setPersistence,
+  browserLocalPersistence
 } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, where, orderBy, limit, addDoc, serverTimestamp } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -22,6 +24,12 @@ const app = initializeApp(firebaseConfig);
 // Use the named database if provided in the config
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+
+// Set persistence to local to handle iframe restrictions better
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error("Could not set persistence:", err);
+});
+
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 

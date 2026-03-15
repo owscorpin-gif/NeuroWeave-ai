@@ -15,21 +15,10 @@ export const LoginForm: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const validatePassword = (pass: string) => {
-    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-    return regex.test(pass);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
-
-    if (isSignUp && !validatePassword(password)) {
-      setError("Password must be at least 8 characters long and include uppercase, lowercase, a number, and a special character.");
-      setLoading(false);
-      return;
-    }
 
     try {
       if (isSignUp) {
@@ -38,8 +27,19 @@ export const LoginForm: React.FC = () => {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || "An error occurred during authentication.");
+      console.error("FULL AUTH ERROR OBJECT:", err);
+      console.error("ERROR CODE:", err.code);
+      console.error("ERROR MESSAGE:", err.message);
+      
+      if (err.code === 'auth/internal-error' || err.message?.includes('internal-error')) {
+        setError("Firebase Internal Error: This usually means 'Email/Password' is not enabled in the Firebase Console, or the current domain is not in the 'Authorized Domains' list.");
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError("Invalid email or password.");
+      } else if (err.code === 'auth/network-request-failed') {
+        setError("Network error. Please check your internet connection.");
+      } else {
+        setError(err.message || "Authentication failed.");
+      }
     } finally {
       setLoading(false);
     }
