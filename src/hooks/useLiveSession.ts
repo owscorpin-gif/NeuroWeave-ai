@@ -2,7 +2,9 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI, Modality, LiveServerMessage } from "@google/genai";
 import { AudioProcessor } from '../services/audioProcessor';
 
-const apiKey = process.env.GEMINI_API_KEY || "";
+const getApiKey = () => {
+  return process.env.API_KEY || process.env.GEMINI_API_KEY || "";
+};
 
 export const useLiveSession = (systemInstruction?: string) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -134,14 +136,32 @@ export const useLiveSession = (systemInstruction?: string) => {
     setIsScreenActive(false);
   };
 
-  const connect = useCallback(async () => {
-    if (!apiKey) return;
+  useEffect(() => {
+    if (isConnected && sessionRef.current) {
+      // Reconnect with new instructions
+      connect();
+    }
+  }, [systemInstruction]);
 
-    const ai = new GoogleGenAI({ apiKey });
+  const connect = useCallback(async () => {
+    const key = getApiKey();
+    if (!key) {
+      setError("API_KEY_MISSING");
+      return;
+    }
+
+    // Close existing session if any
+    if (sessionRef.current) {
+      sessionRef.current.close();
+    }
+
+    const ai = new GoogleGenAI({ apiKey: key });
+    audioProcessor.current.initPlayback();
     
     try {
       setTranscript("");
       setModelTranscript("");
+      setError(null);
       
       const session = await ai.live.connect({
         model: "gemini-2.5-flash-native-audio-preview-09-2025",
@@ -157,31 +177,33 @@ export const useLiveSession = (systemInstruction?: string) => {
         callbacks: {
           onopen: () => {
             console.log("Live session socket opened");
+            setIsConnected(true);
+            startMic();
           },
           onmessage: async (message: LiveServerMessage) => {
-            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (base64Audio) {
-              audioProcessor.current.playPCMChunk(base64Audio);
+            // Handle Audio - Iterate through parts to find inlineData
+            if (message.serverContent?.modelTurn?.parts) {
+              for (const part of message.serverContent.modelTurn.parts) {
+                if (part.inlineData?.data) {
+                  audioProcessor.current.playPCMChunk(part.inlineData.data);
+                }
+                if (part.text) {
+                  setModelTranscript(prev => prev + part.text);
+                }
+              }
             }
 
             if (message.serverContent?.interrupted) {
               audioProcessor.current.stopPlayback();
             }
 
-            // Handle Model Transcription
-            if (message.serverContent?.modelTurn?.parts) {
-              const textPart = message.serverContent.modelTurn.parts.find(p => p.text);
-              if (textPart?.text) {
-                setModelTranscript(prev => prev + textPart.text);
-              }
-            }
-
             // Handle User Transcription
             const userTurn = (message.serverContent as any)?.userTurn;
             if (userTurn?.parts) {
-              const textPart = (userTurn.parts as any[]).find(p => p.text);
-              if (textPart?.text) {
-                setTranscript(prev => prev + textPart.text);
+              for (const part of (userTurn.parts as any[])) {
+                if (part.text) {
+                  setTranscript(prev => prev + part.text);
+                }
               }
             }
           },
@@ -194,6 +216,13 @@ export const useLiveSession = (systemInstruction?: string) => {
           },
           onerror: (error) => {
             console.error("Live session error:", error);
+            if (error.message?.includes("Requested entity was not found")) {
+              setError("LIVE_MODEL_NOT_FOUND");
+            } else if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("403")) {
+              setError("LIVE_API_KEY_REQUIRED");
+            } else {
+              setError("Live session error: " + (error.message || "Connection failed"));
+            }
             setIsConnected(false);
             stopMic();
             stopCamera();
@@ -203,11 +232,16 @@ export const useLiveSession = (systemInstruction?: string) => {
       });
 
       sessionRef.current = session;
-      setIsConnected(true);
-      startMic();
       console.log("Live session connected and ready");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to connect to live session:", error);
+      if (error.message?.includes("Requested entity was not found")) {
+        setError("LIVE_MODEL_NOT_FOUND");
+      } else if (error.message?.includes("403") || error.message?.includes("permission")) {
+        setError("LIVE_API_KEY_REQUIRED");
+      } else {
+        setError("Failed to connect to live session. Please ensure your API key is valid.");
+      }
     }
   }, [systemInstruction]);
 
@@ -217,7 +251,7 @@ export const useLiveSession = (systemInstruction?: string) => {
       if (!isRecording) {
         setIsRecording(true);
         await audioProcessor.current.startRecording((base64) => {
-          if (sessionRef.current && isConnected) {
+          if (sessionRef.current) {
             sessionRef.current.sendRealtimeInput({
               media: { data: base64, mimeType: 'audio/pcm;rate=16000' }
             });
@@ -308,6 +342,12 @@ export const useLiveSession = (systemInstruction?: string) => {
     }
   }, [isConnected]);
 
+  const sendText = useCallback((text: string) => {
+    if (sessionRef.current && isConnected) {
+      sessionRef.current.sendRealtimeInput([{ text }]);
+    }
+  }, [isConnected]);
+
   return {
     isConnected,
     isRecording,
@@ -326,6 +366,7 @@ export const useLiveSession = (systemInstruction?: string) => {
     toggleSession,
     toggleVideo,
     toggleScreen,
-    sendMedia
+    sendMedia,
+    sendText
   };
 };

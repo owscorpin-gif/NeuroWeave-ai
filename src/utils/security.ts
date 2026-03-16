@@ -14,8 +14,9 @@ export const sanitizeHTML = (html: string): string => {
  * Useful for prompts and user messages.
  */
 export const sanitizeText = (text: string): string => {
-  // Remove any potential script tags or dangerous patterns
-  let sanitized = xss(text);
+  // We don't use xss() here because it escapes characters like < and > which are common in math.
+  // Instead, we just redact suspicious prompt injection patterns.
+  let sanitized = text;
   
   // Neutralize common prompt injection keywords if they look suspicious
   const suspiciousPatterns = [

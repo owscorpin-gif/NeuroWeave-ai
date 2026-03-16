@@ -2,13 +2,16 @@ import { GoogleGenAI, GenerateContentResponse, Modality, HarmCategory, HarmBlock
 import { MessagePart } from "../types";
 import { PromptGuard, AIUsageTracker } from "../utils/security";
 
-const apiKey = process.env.GEMINI_API_KEY || "";
+const getApiKey = () => {
+  return process.env.API_KEY || process.env.GEMINI_API_KEY || "";
+};
 
 export const getAI = () => {
-  if (!apiKey) {
+  const key = getApiKey();
+  if (!key) {
     throw new Error("API_KEY_INVALID: Gemini API key is missing. Please configure it in settings.");
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: key });
 };
 
 const safetySettings = [
@@ -213,7 +216,7 @@ export const generateVideo = async (
   const videoResponse = await fetch(downloadLink, {
     method: 'GET',
     headers: {
-      'x-goog-api-key': apiKey,
+      'x-goog-api-key': getApiKey(),
     },
   });
 
@@ -277,4 +280,49 @@ export const generateSpeech = async (text: string, voiceName: string = 'Kore') =
   });
 
   return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+};
+
+export const getPromptSuggestions = async (
+  mode: 'image' | 'video',
+  referenceImages?: { data: string, mimeType: string }[]
+): Promise<string[]> => {
+  if (!AIUsageTracker.canRequest()) throw new Error("Usage limit reached");
+  const ai = getAI();
+
+  const parts: any[] = [
+    {
+      text: `Act as a creative director. Based on the provided reference images (if any) and the target mode (${mode}), suggest 5 highly descriptive and cinematic prompts. 
+      The prompts should be creative, detailed, and optimized for high-quality ${mode} generation.
+      Return the results as a JSON array of strings.
+      Example format: ["prompt 1", "prompt 2", "prompt 3", "prompt 4", "prompt 5"]`
+    }
+  ];
+
+  if (referenceImages && referenceImages.length > 0) {
+    referenceImages.forEach(img => {
+      parts.push({
+        inlineData: {
+          data: img.data,
+          mimeType: img.mimeType
+        }
+      });
+    });
+  }
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: [{ role: "user", parts }],
+    config: {
+      responseMimeType: "application/json",
+      safetySettings,
+    },
+  });
+
+  try {
+    const suggestions = JSON.parse(response.text || "[]");
+    return Array.isArray(suggestions) ? suggestions : [];
+  } catch (e) {
+    console.error("Failed to parse suggestions:", e);
+    return [];
+  }
 };

@@ -147,15 +147,20 @@ export class AudioProcessor {
   private audioQueue: Int16Array[] = [];
   private isPlaying = false;
   private playbackContext: AudioContext | null = null;
+  private nextStartTime = 0;
 
-  async playPCMChunk(base64: string) {
+  initPlayback() {
     if (!this.playbackContext) {
       this.playbackContext = new AudioContext({ sampleRate: 24000 });
+      this.nextStartTime = this.playbackContext.currentTime;
     }
-
     if (this.playbackContext.state === 'suspended') {
-      await this.playbackContext.resume();
+      this.playbackContext.resume();
     }
+  }
+
+  async playPCMChunk(base64: string) {
+    this.initPlayback();
 
     const binary = window.atob(base64);
     const bytes = new Uint8Array(binary.length);
@@ -163,23 +168,8 @@ export class AudioProcessor {
       bytes[i] = binary.charCodeAt(i);
     }
     const pcm = new Int16Array(bytes.buffer);
-    this.audioQueue.push(pcm);
-
-    if (!this.isPlaying) {
-      this.processQueue();
-    }
-  }
-
-  private currentSource: AudioBufferSourceNode | null = null;
-
-  private async processQueue() {
-    if (this.audioQueue.length === 0 || !this.playbackContext) {
-      this.isPlaying = false;
-      return;
-    }
-
-    this.isPlaying = true;
-    const pcm = this.audioQueue.shift()!;
+    
+    // Convert to Float32
     const float32 = new Float32Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {
       float32[i] = pcm[i] / 32768.0;
@@ -188,26 +178,31 @@ export class AudioProcessor {
     const buffer = this.playbackContext.createBuffer(1, float32.length, 24000);
     buffer.getChannelData(0).set(float32);
 
-    this.currentSource = this.playbackContext.createBufferSource();
-    this.currentSource.buffer = buffer;
-    this.currentSource.connect(this.playbackContext.destination);
-    this.currentSource.onended = () => {
-      this.currentSource = null;
-      this.processQueue();
+    const source = this.playbackContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(this.playbackContext.destination);
+
+    // Schedule playback
+    const startTime = Math.max(this.nextStartTime, this.playbackContext.currentTime);
+    source.start(startTime);
+    this.nextStartTime = startTime + buffer.duration;
+    
+    // Keep track of sources to stop them if needed
+    this.activeSources.push(source);
+    source.onended = () => {
+      this.activeSources = this.activeSources.filter(s => s !== source);
     };
-    this.currentSource.start();
   }
 
+  private activeSources: AudioBufferSourceNode[] = [];
+
   stopPlayback() {
-    this.audioQueue = [];
-    this.isPlaying = false;
-    if (this.currentSource) {
+    this.activeSources.forEach(source => {
       try {
-        this.currentSource.stop();
-      } catch (e) {
-        // Source might have already stopped
-      }
-      this.currentSource = null;
-    }
+        source.stop();
+      } catch (e) {}
+    });
+    this.activeSources = [];
+    this.nextStartTime = 0;
   }
 }

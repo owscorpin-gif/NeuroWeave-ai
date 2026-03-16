@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
-import { generateVideo, generateImage } from "../services/geminiService";
-import { Sparkles, Video, Image as ImageIcon, Wand2, Loader2, Download, AlertCircle, Upload, X, Trash2, Layout, Scissors, Play, Pause, Camera } from "lucide-react";
+import { generateVideo, generateImage, getPromptSuggestions } from "../services/geminiService";
+import { Sparkles, Video, Image as ImageIcon, Wand2, Loader2, Download, AlertCircle, Upload, X, Trash2, Layout, Scissors, Play, Pause, Camera, ChevronDown, ChevronUp } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { sanitizeText, validateFile } from "../utils/security";
+import { sanitizeText, validateFile, scanFileForMalware } from "../utils/security";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { ErrorDisplay } from "../components/ErrorDisplay";
@@ -28,6 +28,9 @@ export const MediaStudio: React.FC = () => {
   const [isTrimmed, setIsTrimmed] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isGettingSuggestions, setIsGettingSuggestions] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
@@ -41,7 +44,7 @@ export const MediaStudio: React.FC = () => {
     setIsDragging(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
@@ -49,23 +52,33 @@ export const MediaStudio: React.FC = () => {
       const videoFile = files.find(f => f.type.startsWith('video/'));
       const imageFiles = files.filter(f => f.type.startsWith('image/'));
       
-      if (videoFile) processVideo(videoFile);
-      imageFiles.forEach(file => processFile(file));
+      if (videoFile) await processVideo(videoFile);
+      for (const file of imageFiles) {
+        await processFile(file);
+      }
     }
   };
 
-  const processVideo = (file: File) => {
+  const processVideo = async (file: File) => {
     const validation = validateFile(file, 50, ["video/mp4", "video/quicktime", "video/webm"]);
     if (!validation.valid) {
       setError(validation.error || "Invalid video file");
       return;
     }
+
+    // Add malware scanning for production safety
+    const scan = await scanFileForMalware(file);
+    if (!scan.safe) {
+      setError(scan.error || "Security scan failed for this file.");
+      return;
+    }
+
     const url = URL.createObjectURL(file);
     setSelectedVideo({ file, url });
     setMode('video');
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File) => {
     if (selectedImages.length >= 3) {
       setError("Maximum 3 reference images allowed.");
       return;
@@ -73,6 +86,13 @@ export const MediaStudio: React.FC = () => {
     const validation = validateFile(file, 5, ["image/jpeg", "image/png", "image/webp"]);
     if (!validation.valid) {
       setError(validation.error || "Invalid file");
+      return;
+    }
+
+    // Add malware scanning for production safety
+    const scan = await scanFileForMalware(file);
+    if (!scan.safe) {
+      setError(scan.error || "Security scan failed for this file.");
       return;
     }
     
@@ -86,10 +106,12 @@ export const MediaStudio: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
-      files.forEach(file => processFile(file));
+      for (const file of files) {
+        await processFile(file);
+      }
     }
   };
 
@@ -98,9 +120,9 @@ export const MediaStudio: React.FC = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) processVideo(file);
+    if (file) await processVideo(file);
   };
 
   const removeVideo = () => {
@@ -251,6 +273,31 @@ export const MediaStudio: React.FC = () => {
     }
   };
 
+  const handleGetSuggestions = async () => {
+    setIsGettingSuggestions(true);
+    setShowSuggestions(true);
+    try {
+      const referenceImages = selectedImages.map(img => ({
+        data: img.preview.split(",")[1],
+        mimeType: img.file.type
+      }));
+
+      if (selectedVideo && mode === 'video') {
+        const firstFrame = await extractFrame(trimRange[0]);
+        const lastFrame = await extractFrame(trimRange[1]);
+        if (firstFrame) referenceImages.unshift(firstFrame);
+        if (lastFrame) referenceImages.push(lastFrame);
+      }
+
+      const results = await getPromptSuggestions(mode, referenceImages);
+      setSuggestions(results);
+    } catch (err) {
+      console.error("Failed to get suggestions:", err);
+    } finally {
+      setIsGettingSuggestions(false);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto p-8 lg:p-12">
       <header className="mb-12">
@@ -322,6 +369,68 @@ export const MediaStudio: React.FC = () => {
               placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the scene for your cinematic video..."}
               className="w-full bg-transparent border-none focus:ring-0 text-white text-2xl font-serif min-h-[140px] resize-none placeholder:text-gray-700 leading-relaxed"
             />
+
+            <div className="mt-4">
+              <button
+                onClick={() => setShowSuggestions(!showSuggestions)}
+                className="flex items-center gap-2 text-xs font-mono text-accent hover:text-accent-light transition-colors"
+              >
+                <Sparkles size={14} />
+                <span className="uppercase tracking-widest">{showSuggestions ? "Hide Suggestions" : "Get AI Suggestions"}</span>
+                {showSuggestions ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+
+              <AnimatePresence>
+                {showSuggestions && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="pt-6 space-y-3">
+                      {isGettingSuggestions ? (
+                        <div className="flex items-center gap-3 text-gray-500 text-xs font-mono animate-pulse p-4 bg-white/5 rounded-2xl border border-white/5">
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>BRAINSTORMING CREATIVE PROMPTS...</span>
+                        </div>
+                      ) : suggestions.length > 0 ? (
+                        <div className="grid grid-cols-1 gap-2">
+                          {suggestions.map((s, i) => (
+                            <button
+                              key={i}
+                              onClick={() => setPrompt(s)}
+                              className="text-left p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-accent/30 transition-all text-sm text-gray-400 hover:text-white group"
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="mt-1 p-1 rounded-md bg-accent/10 text-accent opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Wand2 size={12} />
+                                </div>
+                                <span>{s}</span>
+                              </div>
+                            </button>
+                          ))}
+                          <button 
+                            onClick={handleGetSuggestions}
+                            className="text-center py-2 text-[10px] font-mono text-gray-600 hover:text-accent transition-colors uppercase tracking-widest"
+                          >
+                            Refresh Suggestions
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={handleGetSuggestions}
+                          className="w-full p-8 rounded-2xl border border-dashed border-white/10 text-gray-500 text-xs font-mono hover:bg-white/5 hover:border-accent/20 transition-all flex flex-col items-center gap-3"
+                        >
+                          <Sparkles size={24} className="text-accent/40" />
+                          <span>CLICK TO GENERATE TAILORED PROMPT IDEAS</span>
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
             
             {isDragging && (
               <div className="absolute inset-0 flex items-center justify-center bg-accent/10 border-2 border-dashed border-accent rounded-2xl pointer-events-none">
@@ -436,10 +545,20 @@ export const MediaStudio: React.FC = () => {
                       />
                     </div>
 
+                    {/* Start/End Visual Markers on Bar */}
+                    <div 
+                      className="absolute h-4 w-1 bg-white rounded-full z-20 pointer-events-none shadow-[0_0_8px_rgba(255,255,255,0.5)]"
+                      style={{ left: `calc(${(trimRange[0] / videoDuration) * 100}% + 8px)` }}
+                    />
+                    <div 
+                      className="absolute h-4 w-1 bg-accent rounded-full z-20 pointer-events-none shadow-[0_0_8px_rgba(242,125,38,0.5)]"
+                      style={{ left: `calc(${(trimRange[1] / videoDuration) * 100}% + 8px)` }}
+                    />
+
                     {/* Playhead */}
                     <div 
                       className="absolute h-12 w-0.5 bg-white z-30 pointer-events-none transition-all duration-75"
-                      style={{ left: `${(currentTime / videoDuration) * 100}%` }}
+                      style={{ left: `calc(${(currentTime / videoDuration) * 100}% + 8px)` }}
                     >
                       <div className="absolute -top-1 -left-1 w-2.5 h-2.5 bg-white rounded-full shadow-lg" />
                     </div>
@@ -447,7 +566,7 @@ export const MediaStudio: React.FC = () => {
                     {/* Start Marker (Bracket) */}
                     <div 
                       className="absolute h-10 w-4 border-l-2 border-t-2 border-b-2 border-white z-10 pointer-events-none rounded-l-md"
-                      style={{ left: `${(trimRange[0] / videoDuration) * 100}%` }}
+                      style={{ left: `calc(${(trimRange[0] / videoDuration) * 100}% + 8px)` }}
                     >
                       <div className="absolute -top-6 left-0 text-[9px] font-mono text-white font-bold uppercase tracking-tighter">Start</div>
                     </div>
@@ -455,9 +574,9 @@ export const MediaStudio: React.FC = () => {
                     {/* End Marker (Bracket) */}
                     <div 
                       className="absolute h-10 w-4 border-r-2 border-t-2 border-b-2 border-accent z-10 pointer-events-none rounded-r-md"
-                      style={{ left: `calc(${(trimRange[1] / videoDuration) * 100}% - 16px)` }}
+                      style={{ left: `calc(${(trimRange[1] / videoDuration) * 100}% - 8px)` }}
                     >
-                      <div className="absolute -top-6 right-0 text-[9px] font-mono text-accent font-bold uppercase tracking-tighter">End</div>
+                      <div className="absolute -top-6 right-0 text-[9px] font-mono text-accent font-bold uppercase tracking-tighter text-right">End</div>
                     </div>
 
                     <input
@@ -559,6 +678,8 @@ export const MediaStudio: React.FC = () => {
                 <Video size={14} />
                 <span>{selectedVideo ? "Video Loaded" : "Video Reference"}</span>
               </button>
+              
+              <div className="flex items-center gap-2">
                 {(["16:9", "9:16", "1:1", "4:3", "3:4"] as const).map((ratio) => (
                   <button
                     key={ratio}
@@ -575,8 +696,14 @@ export const MediaStudio: React.FC = () => {
                 ))}
               </div>
             </div>
+            <div className="mt-2 flex flex-col gap-1">
+              <p className="text-[9px] text-gray-600 font-mono uppercase tracking-tighter">
+                Images: Max 5MB (JPG, PNG, WEBP) • Videos: Max 50MB (MP4, MOV, WEBM)
+              </p>
+            </div>
+          </div>
 
-            <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4">
               {isGenerating && (
                 <div className="flex flex-col items-end gap-2">
                   <div className="flex items-center gap-3 text-accent animate-pulse">

@@ -1,5 +1,5 @@
 import React from "react";
-import { LayoutDashboard, MessageSquare, Image as ImageIcon, Settings, LogOut, Cpu, Shield, Music } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Image as ImageIcon, Settings, LogOut, Cpu, Shield, Music, Camera } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { useFirebase } from "../context/FirebaseContext";
@@ -21,6 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: "chat", icon: MessageSquare, label: "Neural Chat" },
     { id: "studio", icon: ImageIcon, label: "Media Studio" },
     { id: "audio", icon: Music, label: "Audio Lab" },
+    { id: "gallery", icon: Camera, label: "Gallery" },
     { id: "settings", icon: Settings, label: "Settings" },
   ];
 

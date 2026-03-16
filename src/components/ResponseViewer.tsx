@@ -1,5 +1,8 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { motion } from "motion/react";
 import { Message } from "../types";
 import { Play, Download, Maximize2, Volume2 } from "lucide-react";
@@ -46,7 +49,9 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ message, isStrea
                       )}
                     </div>
                   ) : (
-                    <ReactMarkdown>{part.text}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {part.text}
+                    </ReactMarkdown>
                   )}
                 </div>
               )}

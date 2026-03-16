@@ -14,6 +14,13 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry, clas
 
   const { code, message, guidance } = mapErrorToUserFriendly(error);
 
+  const handleSelectKey = async () => {
+    if ((window as any).aistudio) {
+      await (window as any).aistudio.openSelectKey();
+      if (onRetry) onRetry();
+    }
+  };
+
   const getIcon = () => {
     switch (code) {
       case ErrorCode.SAFETY_BLOCKED:
@@ -24,6 +31,7 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry, clas
       case ErrorCode.NETWORK_ERROR:
         return <WifiOff className="text-gray-400" size={24} />;
       case ErrorCode.PERMISSION_DENIED:
+      case ErrorCode.LIVE_API_KEY_REQUIRED:
         return <Lock className="text-red-400" size={24} />;
       default:
         return <AlertCircle className="text-red-400" size={24} />;
@@ -41,15 +49,27 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({ error, onRetry, clas
         <h4 className="text-sm font-bold text-white mb-1">{message}</h4>
         <p className="text-xs text-gray-400 leading-relaxed mb-3">{guidance}</p>
         
-        {onRetry && (
-          <button 
-            onClick={onRetry}
-            className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-accent hover:text-white transition-colors"
-          >
-            <RefreshCcw size={12} />
-            Attempt Recovery
-          </button>
-        )}
+        <div className="flex gap-4">
+          {code === ErrorCode.LIVE_API_KEY_REQUIRED && (
+            <button 
+              onClick={handleSelectKey}
+              className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-accent hover:text-white transition-colors"
+            >
+              <Lock size={12} />
+              Select Paid API Key
+            </button>
+          )}
+
+          {onRetry && (
+            <button 
+              onClick={onRetry}
+              className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-accent hover:text-white transition-colors"
+            >
+              <RefreshCcw size={12} />
+              Attempt Recovery
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );

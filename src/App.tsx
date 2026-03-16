@@ -5,6 +5,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Chat } from "./pages/Chat";
 import { MediaStudio } from "./pages/MediaStudio";
 import { AudioLab } from "./pages/AudioLab";
+import { GalleryGenerator } from "./components/GalleryGenerator";
 import { Settings } from "./pages/Settings";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { Agent } from "./types";
@@ -101,6 +102,18 @@ export default function App() {
               className="h-full"
             >
               <AudioLab />
+            </motion.div>
+          )}
+
+          {activeTab === "gallery" && (
+            <motion.div
+              key="gallery"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="h-full"
+            >
+              <GalleryGenerator />
             </motion.div>
           )}
 

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { generateImage, generateVideo, generateSpeech } from "../services/geminiService";
 import { Play, Loader2, Image as ImageIcon, Video, Volume2, AlertCircle } from "lucide-react";
 import { motion } from "motion/react";
@@ -137,7 +140,9 @@ export const InterleavedContent: React.FC<InterleavedContentProps> = ({ text }) 
         if (part.trim()) {
           return (
             <div key={i} className="prose prose-invert max-w-none">
-              <ReactMarkdown>{part}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                {part}
+              </ReactMarkdown>
             </div>
           );
         }

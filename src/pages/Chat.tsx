@@ -29,7 +29,16 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<any>(null);
+  const [targetLanguage, setTargetLanguage] = useState("English");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const isLinguist = agent?.id === 'global-translator';
+  const isNexus = agent?.id === 'nexus-orchestrator';
+  const isHighReasoning = agent?.id === 'live-agent' || agent?.id === 'ui-navigator' || isNexus;
+
+  const effectiveSystemInstruction = isLinguist 
+    ? `${agent?.systemInstruction}\n\nCURRENT TARGET LANGUAGE: ${targetLanguage}. If the user speaks any language other than ${targetLanguage}, translate it to ${targetLanguage}. If they speak ${targetLanguage}, translate it to Hindi.`
+    : agent?.systemInstruction;
 
   const { 
     isConnected, 
@@ -44,17 +53,14 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
     toggleScreen, 
     screenStream, 
     sendMedia,
+    sendText,
     volume,
     error: liveError,
     isRecordingMessage,
     startVoiceMessage,
     stopVoiceMessage,
     clearError: clearLiveError
-  } = useLiveSession(agent?.systemInstruction);
-
-  const isLinguist = agent?.id === 'global-translator';
-  const isNexus = agent?.id === 'nexus-orchestrator';
-  const isHighReasoning = agent?.id === 'live-agent' || agent?.id === 'ui-navigator' || isNexus;
+  } = useLiveSession(effectiveSystemInstruction);
 
   useEffect(() => {
     if (liveError) {
@@ -142,7 +148,15 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
     const sanitizedText = sanitizeText(text);
     
     const userParts: any[] = [];
-    if (sanitizedText) userParts.push({ text: sanitizedText });
+    if (sanitizedText) {
+      userParts.push({ text: sanitizedText });
+    } else if (files.length > 0) {
+      // Add a default context prompt if only files are uploaded
+      const defaultPrompt = isLinguist 
+        ? `Please read the text in the attached image(s) carefully and translate it into ${targetLanguage}.`
+        : "Please analyze the attached media and provide a detailed response. If there are any mathematical or scientific problems, solve them step-by-step.";
+      userParts.push({ text: defaultPrompt });
+    }
 
     // 2. Validate and process files
     for (const file of files) {
@@ -172,9 +186,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
     }
 
     if (isConnected && sanitizedText) {
-      // If live, we just send the text as a turn if possible, 
-      // but Live API is mostly audio/video. 
-      // For now, we'll just add it to messages so the user sees it.
+      sendText(sanitizedText);
     }
 
     const userMessage: Message = {
@@ -208,7 +220,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
       const stream = streamMultimodalResponse(
         effectiveModel,
         userParts,
-        agent.systemInstruction
+        effectiveSystemInstruction
       );
 
       let fullText = "";
@@ -315,6 +327,38 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
         </div>
 
         <div className="flex gap-2">
+          {isLinguist && (
+            <div className="flex items-center gap-2 mr-4">
+              <span className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">Target:</span>
+              <select 
+                value={targetLanguage}
+                onChange={(e) => setTargetLanguage(e.target.value)}
+                className="bg-white/5 border border-white/10 rounded-lg text-[10px] text-accent font-mono uppercase tracking-widest px-2 py-1 focus:outline-none focus:border-accent/50"
+              >
+                <option value="English">English</option>
+                <option value="Hindi">Hindi</option>
+                <option value="Spanish">Spanish</option>
+                <option value="French">French</option>
+                <option value="German">German</option>
+                <option value="Japanese">Japanese</option>
+                <option value="Chinese">Chinese</option>
+                <option value="Russian">Russian</option>
+                <option value="Arabic">Arabic</option>
+                <option value="Portuguese">Portuguese</option>
+                <option value="Italian">Italian</option>
+                <option value="Korean">Korean</option>
+                <option value="Turkish">Turkish</option>
+                <option value="Dutch">Dutch</option>
+                <option value="Vietnamese">Vietnamese</option>
+                <option value="Thai">Thai</option>
+                <option value="Bengali">Bengali</option>
+                <option value="Punjabi">Punjabi</option>
+                <option value="Marathi">Marathi</option>
+                <option value="Telugu">Telugu</option>
+                <option value="Tamil">Tamil</option>
+              </select>
+            </div>
+          )}
           <button className="p-2 hover:bg-white/5 rounded-xl text-gray-400 transition-colors">
             <Trash2 size={18} />
           </button>
