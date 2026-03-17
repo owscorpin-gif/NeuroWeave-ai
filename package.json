@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
@@ -20,7 +23,6 @@
     "@types/lusca": "^1.7.5",
     "@vitejs/plugin-react": "^5.0.4",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.8.0",
     "clsx": "^2.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",

@@ -19,17 +19,18 @@ let firebaseConfig: any = {};
 const configPath = path.join(process.cwd(), "firebase-applet-config.json");
 try {
   if (fs.existsSync(configPath)) {
-    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  } else {
-    firebaseConfig = {
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    };
+    const rawConfig = fs.readFileSync(configPath, "utf-8");
+    firebaseConfig = JSON.parse(rawConfig);
+    console.log("Loaded Firebase config from file");
   }
 } catch (err) {
-  console.error("Error loading Firebase config:", err);
+  console.warn("Could not load firebase-applet-config.json, falling back to env vars:", err);
 }
+
+// Merge with environment variables (env vars take precedence)
+if (process.env.FIREBASE_PROJECT_ID) firebaseConfig.projectId = process.env.FIREBASE_PROJECT_ID;
+if (process.env.FIREBASE_CLIENT_EMAIL) firebaseConfig.clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+if (process.env.FIREBASE_PRIVATE_KEY) firebaseConfig.privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
 
 if (!admin.apps.length) {
   try {
@@ -121,6 +122,15 @@ app.use(cors({
 app.use(express.json({ limit: "10kb" }));
 
 // API Routes
+app.get("/api", (req, res) => {
+  res.json({ 
+    message: "NeuroWeave AI API is active", 
+    version: "1.0.0",
+    env: process.env.NODE_ENV,
+    firebase: !!admin.apps.length
+  });
+});
+
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString(), env: "vercel" });
 });
@@ -171,5 +181,15 @@ app.post("/api/user/update-profile",
     }
   }
 );
+
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("Global API Error:", err);
+  res.status(500).json({ 
+    error: "Internal Server Error", 
+    message: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+});
 
 export default app;
