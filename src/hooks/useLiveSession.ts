@@ -49,7 +49,7 @@ export const useLiveSession = (systemInstruction?: string) => {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setError("Camera permission denied. Please allow camera access in your browser settings.");
       } else {
-        setError("Failed to start camera: " + (err.message || "Unknown error"));
+        setError("Failed to start camera: " + (err.message || "Unknown error") + ". Please ensure your camera is connected and not being used by another application.");
       }
     }
   };
@@ -72,7 +72,7 @@ export const useLiveSession = (systemInstruction?: string) => {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setError("Screen share permission denied. Please allow screen capture when prompted.");
       } else {
-        setError("Failed to start screen share: " + (err.message || "Unknown error"));
+        setError("Failed to start screen share: " + (err.message || "Unknown error") + ". Please ensure your browser supports screen sharing and you haven't canceled the prompt.");
       }
     }
   };
@@ -146,7 +146,7 @@ export const useLiveSession = (systemInstruction?: string) => {
   const connect = useCallback(async () => {
     const key = getApiKey();
     if (!key) {
-      setError("API_KEY_MISSING");
+      setError("Gemini API key is missing. Please add your API key in the settings menu to enable real-time features.");
       return;
     }
 
@@ -217,11 +217,13 @@ export const useLiveSession = (systemInstruction?: string) => {
           onerror: (error) => {
             console.error("Live session error:", error);
             if (error.message?.includes("Requested entity was not found")) {
-              setError("LIVE_MODEL_NOT_FOUND");
-            } else if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("403")) {
-              setError("LIVE_API_KEY_REQUIRED");
+              setError("The Live model (Gemini 2.5 Flash) was not found. This might be a temporary service issue or region restriction.");
+            } else if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("403") || error.message?.includes("permission")) {
+              setError("A paid Gemini API key is required for the Live API. Please ensure your key is from a Google Cloud project with billing enabled (ai.google.dev/gemini-api/docs/billing).");
+            } else if (error.message?.includes("quota") || error.message?.includes("429")) {
+              setError("API quota exceeded. Please check your usage limits in the Google AI Studio console.");
             } else {
-              setError("Live session error: " + (error.message || "Connection failed"));
+              setError("Live session connection failed: " + (error.message || "Unknown error") + ". Please check your internet connection and try again.");
             }
             setIsConnected(false);
             stopMic();
@@ -236,11 +238,13 @@ export const useLiveSession = (systemInstruction?: string) => {
     } catch (error: any) {
       console.error("Failed to connect to live session:", error);
       if (error.message?.includes("Requested entity was not found")) {
-        setError("LIVE_MODEL_NOT_FOUND");
+        setError("The Live model (Gemini 2.5 Flash) was not found. This might be a temporary service issue or region restriction.");
       } else if (error.message?.includes("403") || error.message?.includes("permission")) {
-        setError("LIVE_API_KEY_REQUIRED");
+        setError("A paid Gemini API key is required for the Live API. Please ensure your key is from a Google Cloud project with billing enabled (ai.google.dev/gemini-api/docs/billing).");
+      } else if (error.message?.includes("quota") || error.message?.includes("429")) {
+        setError("API quota exceeded. Please check your usage limits in the Google AI Studio console.");
       } else {
-        setError("Failed to connect to live session. Please ensure your API key is valid.");
+        setError("Failed to connect to live session. Please ensure your internet connection is stable and your API key is valid.");
       }
     }
   }, [systemInstruction]);
@@ -264,7 +268,7 @@ export const useLiveSession = (systemInstruction?: string) => {
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         setError("Microphone permission denied. Please allow microphone access in your browser settings.");
       } else {
-        setError("Failed to start microphone: " + (err.message || "Unknown error"));
+        setError("Failed to start microphone: " + (err.message || "Unknown error") + ". Please ensure your microphone is connected and not muted at the system level.");
       }
     }
   };

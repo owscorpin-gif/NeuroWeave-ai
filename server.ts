@@ -20,7 +20,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin
-let firebaseConfig;
+let firebaseConfig: any = {};
 const configPath = path.join(process.cwd(), "firebase-applet-config.json");
 try {
   if (fs.existsSync(configPath)) {
@@ -36,20 +36,28 @@ try {
   console.error("Error loading Firebase config:", err);
 }
 
-if (firebaseConfig && (firebaseConfig.projectId || firebaseConfig.credential)) {
-  if (!admin.apps.length) {
-    const options: any = {
-      projectId: firebaseConfig.projectId,
-    };
-    if (firebaseConfig.privateKey) {
-      options.credential = admin.credential.cert(firebaseConfig as any);
+if (!admin.apps.length) {
+  try {
+    if (firebaseConfig.projectId && firebaseConfig.clientEmail && firebaseConfig.privateKey) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: firebaseConfig.projectId,
+          clientEmail: firebaseConfig.clientEmail,
+          privateKey: firebaseConfig.privateKey,
+        }),
+      });
+      console.log("Firebase Admin initialized with service account");
+    } else if (firebaseConfig.projectId) {
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId,
+      });
+      console.log("Firebase Admin initialized with projectId only");
+    } else {
+      admin.initializeApp();
+      console.log("Firebase Admin initialized with default credentials");
     }
-    admin.initializeApp(options);
-  }
-} else {
-  // Fallback for environments with default credentials
-  if (!admin.apps.length) {
-    admin.initializeApp();
+  } catch (initErr) {
+    console.error("Firebase Admin initialization failed:", initErr);
   }
 }
 

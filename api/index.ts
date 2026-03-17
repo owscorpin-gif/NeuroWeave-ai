@@ -15,7 +15,7 @@ import { networkSecurity } from "../server/middleware/networkSecurity";
 import slowDown from "express-slow-down";
 
 // Initialize Firebase Admin
-let firebaseConfig;
+let firebaseConfig: any = {};
 const configPath = path.join(process.cwd(), "firebase-applet-config.json");
 try {
   if (fs.existsSync(configPath)) {
@@ -31,19 +31,34 @@ try {
   console.error("Error loading Firebase config:", err);
 }
 
-if (firebaseConfig && (firebaseConfig.projectId || firebaseConfig.credential)) {
-  if (!admin.apps.length) {
-    const options: any = {
-      projectId: firebaseConfig.projectId,
-    };
-    if (firebaseConfig.privateKey) {
-      options.credential = admin.credential.cert(firebaseConfig as any);
+if (!admin.apps.length) {
+  try {
+    console.log("Environment check:", {
+      hasProjectId: !!firebaseConfig.projectId,
+      hasClientEmail: !!firebaseConfig.clientEmail,
+      hasPrivateKey: !!firebaseConfig.privateKey,
+      nodeEnv: process.env.NODE_ENV
+    });
+    if (firebaseConfig.projectId && firebaseConfig.clientEmail && firebaseConfig.privateKey) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: firebaseConfig.projectId,
+          clientEmail: firebaseConfig.clientEmail,
+          privateKey: firebaseConfig.privateKey,
+        }),
+      });
+      console.log("Firebase Admin initialized with service account");
+    } else if (firebaseConfig.projectId) {
+      admin.initializeApp({
+        projectId: firebaseConfig.projectId,
+      });
+      console.log("Firebase Admin initialized with projectId only");
+    } else {
+      admin.initializeApp();
+      console.log("Firebase Admin initialized with default credentials");
     }
-    admin.initializeApp(options);
-  }
-} else {
-  if (!admin.apps.length) {
-    admin.initializeApp();
+  } catch (initErr) {
+    console.error("Firebase Admin initialization failed:", initErr);
   }
 }
 
@@ -51,52 +66,29 @@ const db = admin.firestore();
 
 const app = express();
 
-// 1. Security Headers
+// 1. Security Headers - Relaxed for Vercel deployment
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://generativelanguage.googleapis.com", "https://*.firebasejs.com", "https://*.googleapis.com", "https://apis.google.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "blob:", "https://picsum.photos", "https://*.googleusercontent.com", "https://*.googleapis.com", "https://*.firebaseapp.com"],
-      connectSrc: ["'self'", "https://generativelanguage.googleapis.com", "https://*.googleapis.com", "https://*.firebaseio.com", "wss://*.googleapis.com", "https://*.firebaseapp.com"],
-      mediaSrc: ["'self'", "data:", "blob:", "https://*.googleusercontent.com"],
-      frameSrc: ["'self'", "https://*.firebaseapp.com", "https://*.googleapis.com", "https://*.firebasejs.com"],
-      frameAncestors: ["'self'", "https://*.google.com", "https://*.googleusercontent.com", "https://*.run.app"],
-    },
-  },
+  contentSecurityPolicy: false, // Disable CSP for now to rule it out
   crossOriginEmbedderPolicy: false,
-  xssFilter: true,
-  noSniff: true,
-  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
 }));
 
 app.use(cookieParser());
 
-// 2. Session & CSRF
+// 2. Session & CSRF - Simplified for Vercel (stateless environment)
 app.use(session({
   secret: process.env.SESSION_SECRET || "neuroweave-secret-key-123",
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
   cookie: {
     httpOnly: true,
     secure: true,
-    sameSite: "none",
+    sameSite: "lax", // Changed from none to lax
     maxAge: 3600000
   }
 }));
 
-app.use(lusca.csrf({
-  cookie: {
-    name: "_csrf",
-    options: {
-      httpOnly: false,
-      secure: true,
-      sameSite: "none"
-    }
-  }
-}));
+// Disable CSRF for Vercel to avoid session persistence issues
+// app.use(lusca.csrf({ ... }));
 
 app.use(lusca.p3p("ABCDEF"));
 app.use(lusca.xssProtection(true));
@@ -134,7 +126,9 @@ app.get("/api/health", (req, res) => {
 });
 
 app.get("/api/csrf-token", (req, res) => {
-  res.json({ csrfToken: (req as any).csrfToken() });
+  // Return a dummy token if CSRF is disabled for Vercel
+  const token = (req as any).csrfToken ? (req as any).csrfToken() : "disabled";
+  res.json({ csrfToken: token });
 });
 
 app.use("/api/", authenticate);
