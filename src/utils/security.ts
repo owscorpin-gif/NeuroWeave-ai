@@ -114,7 +114,23 @@ export class AIUsageTracker {
  * Validates a file against size and type constraints.
  * Restrictive: only allows jpg, png, pdf.
  */
-export const validateFile = (file: File, maxSizeMB: number = 5, allowedTypes: string[] = ["image/jpeg", "image/png", "application/pdf"]): { valid: boolean; error?: string } => {
+export const validateFile = (
+  file: File, 
+  maxSizeMB: number = 20, 
+  allowedTypes: string[] = [
+    "image/jpeg", 
+    "image/png", 
+    "image/gif", 
+    "image/webp", 
+    "application/pdf",
+    "video/mp4",
+    "video/quicktime",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/ogg",
+    "audio/mp3"
+  ]
+): { valid: boolean; error?: string } => {
   const maxSizeBytes = maxSizeMB * 1024 * 1024;
   
   if (file.size > maxSizeBytes) {
@@ -123,10 +139,11 @@ export const validateFile = (file: File, maxSizeMB: number = 5, allowedTypes: st
   
   if (!allowedTypes.includes(file.type)) {
     const typesList = allowedTypes.map(t => {
-      const ext = t.split('/')[1].toUpperCase();
+      const parts = t.split('/');
+      const ext = parts[1].toUpperCase();
       return ext === 'QUICKTIME' ? 'MOV' : ext;
     }).join(", ");
-    return { valid: false, error: `Unsupported file type. Allowed types: ${typesList}` };
+    return { valid: false, error: `Unsupported file type (${file.type}). Allowed types: ${typesList}` };
   }
   
   return { valid: true };

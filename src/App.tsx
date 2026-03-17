@@ -18,6 +18,7 @@ export default function App() {
   const { user, loading } = useFirebase();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCsrfToken();
@@ -25,6 +26,13 @@ export default function App() {
 
   const handleAgentSelect = (agent: Agent) => {
     setSelectedAgent(agent);
+    setActiveConversationId(null); // New chat
+    setActiveTab("chat");
+  };
+
+  const handleConversationSelect = (convId: string, agent: Agent) => {
+    setSelectedAgent(agent);
+    setActiveConversationId(convId);
     setActiveTab("chat");
   };
 
@@ -49,7 +57,12 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-bg overflow-hidden data-grid">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onConversationSelect={handleConversationSelect}
+        activeConversationId={activeConversationId}
+      />
       
       <main className="flex-1 relative overflow-hidden flex flex-col">
         <AnimatePresence mode="wait">
@@ -75,8 +88,10 @@ export default function App() {
             >
               <Chat 
                 agent={selectedAgent} 
+                conversationId={activeConversationId}
                 onBack={() => setActiveTab("dashboard")} 
                 onAgentSelect={handleAgentSelect}
+                onConversationCreated={(id) => setActiveConversationId(id)}
               />
             </motion.div>
           )}

@@ -74,27 +74,28 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt']) &&
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt', 'lastLogin']) &&
              data.uid == request.auth.uid &&
              isValidEmail(data.email) &&
              (data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
              (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500)) &&
              data.role in ['user', 'admin', 'developer'] &&
-             data.createdAt is timestamp;
+             data.createdAt is timestamp &&
+             (data.lastLogin == null || data.lastLogin is timestamp);
     }
 
     function isValidConversation(data) {
-      return hasOnlyAllowedFields(['userId', 'agentId', 'title', 'lastMessage', 'updatedAt']) &&
+      return hasOnlyAllowedFields(['userId', 'agentId', 'title', 'lastMessage', 'updatedAt', 'createdAt']) &&
              data.userId == request.auth.uid &&
              data.agentId is string && data.agentId.size() < 100 &&
              (data.title == null || (data.title is string && data.title.size() < 200)) &&
              (data.lastMessage == null || (data.lastMessage is string && data.lastMessage.size() < 500)) &&
-             data.updatedAt is timestamp;
+             data.updatedAt is timestamp &&
+             (data.createdAt == null || data.createdAt is timestamp);
     }
 
     function isValidMessage(data) {
-      return hasOnlyAllowedFields(['conversationId', 'role', 'parts', 'timestamp']) &&
-             data.conversationId is string && data.conversationId.size() < 100 &&
+      return hasOnlyAllowedFields(['role', 'parts', 'timestamp']) &&
              data.role in ['user', 'model'] &&
              data.parts is list && data.parts.size() < 50 &&
              data.timestamp is timestamp;

@@ -19,18 +19,43 @@ const icons = {
 
 import { motion, AnimatePresence } from "motion/react";
 
+import { createConversation, saveMessage, getConversationMessages, updateConversationTitle } from "../services/chatService";
+import { useFirebase } from "../context/FirebaseContext";
+
 interface ChatProps {
   agent: Agent | null;
+  conversationId?: string | null;
   onBack: () => void;
   onAgentSelect: (agent: Agent) => void;
+  onConversationCreated?: (id: string) => void;
 }
 
-export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
+export const Chat: React.FC<ChatProps> = ({ agent, conversationId: initialConversationId, onBack, onAgentSelect, onConversationCreated }) => {
+  const { user } = useFirebase();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(initialConversationId || null);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<any>(null);
   const [targetLanguage, setTargetLanguage] = useState("English");
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Load messages if conversationId changes
+  useEffect(() => {
+    if (conversationId) {
+      const unsubscribe = getConversationMessages(conversationId, (loadedMessages) => {
+        setMessages(loadedMessages);
+      });
+      return () => unsubscribe();
+    } else {
+      setMessages([]);
+    }
+  }, [conversationId]);
+
+  // Update local conversationId if prop changes
+  useEffect(() => {
+    setConversationId(initialConversationId || null);
+  }, [initialConversationId]);
 
   const isLinguist = agent?.id === 'global-translator';
   const isNexus = agent?.id === 'nexus-orchestrator';
@@ -143,28 +168,38 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
 
   const handleSend = async (text: string, files: File[]) => {
     setError(null);
+    setIsUploading(true);
     
-    // 1. Sanitize text input
-    const sanitizedText = sanitizeText(text);
+    let userParts: any[] = [];
     
-    const userParts: any[] = [];
-    if (sanitizedText) {
-      userParts.push({ text: sanitizedText });
-    } else if (files.length > 0) {
-      // Add a default context prompt if only files are uploaded
-      const defaultPrompt = isLinguist 
-        ? `Please read the text in the attached image(s) carefully and translate it into ${targetLanguage}.`
-        : "Please analyze the attached media and provide a detailed response. If there are any mathematical or scientific problems, solve them step-by-step.";
-      userParts.push({ text: defaultPrompt });
-    }
+    try {
+      // 1. Sanitize text input
+      const sanitizedText = sanitizeText(text);
+      
+      if (sanitizedText) {
+        userParts.push({ text: sanitizedText });
+      } else if (files.length > 0) {
+        // Add a default context prompt if only files are uploaded
+        const defaultPrompt = isLinguist 
+          ? `Please read the text in the attached image(s) carefully and translate it into ${targetLanguage}.`
+          : "Please analyze the attached media and provide a detailed response. If there are any mathematical or scientific problems, solve them step-by-step.";
+        userParts.push({ text: defaultPrompt });
+      }
 
     // 2. Validate and process files
     for (const file of files) {
-      const uploadResult = await uploadFileSecurely(file, "chat_attachments");
-      
-      if (uploadResult.error) {
-        setError(uploadResult.error);
-        return;
+      let fileUrl = "";
+      // Try to upload to Cloud Storage for persistence, but don't block if it fails
+      // as we can still use the base64 data for the Gemini API.
+      try {
+        const uploadResult = await uploadFileSecurely(file, "chat_attachments");
+        if (uploadResult.error) {
+          console.warn("Cloud Storage upload failed, proceeding with local data:", uploadResult.error);
+        } else {
+          fileUrl = uploadResult.url;
+        }
+      } catch (e) {
+        console.warn("Cloud Storage upload error, proceeding with local data:", e);
       }
 
       const base64 = await new Promise<string>((resolve) => {
@@ -182,6 +217,8 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
           mimeType: file.type,
           data: base64,
         },
+        // Store the URL for persistence if available
+        fileUrl: fileUrl || undefined
       });
     }
 
@@ -196,15 +233,36 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
       timestamp: Date.now(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // Persistence Logic
+    let currentConvId = conversationId;
+    if (!currentConvId && user) {
+      // Create new conversation
+      const title = sanitizedText ? sanitizedText.substring(0, 30) : "New Media Chat";
+      currentConvId = await createConversation(user.uid, agent!.id, title);
+      setConversationId(currentConvId);
+      if (onConversationCreated) onConversationCreated(currentConvId);
+    }
+
+    if (currentConvId) {
+      await saveMessage(currentConvId, userMessage);
+    } else {
+      setMessages((prev) => [...prev, userMessage]);
+    }
 
     if (isConnected) {
+      setIsUploading(false);
       return;
     }
 
     setIsStreaming(true);
+  } catch (err: any) {
+    console.error("Send error:", err);
+    setError(err.message || "Failed to send message");
+    setIsUploading(false);
+    return; // Stop if error
+  }
 
-    const hasImages = userParts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/'));
+  const hasImages = userParts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/'));
     const effectiveModel = (isHighReasoning || hasImages) ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview";
 
     try {
@@ -215,7 +273,10 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
         timestamp: Date.now(),
       };
 
-      setMessages((prev) => [...prev, modelMessage]);
+      // We don't save the empty model message yet, we'll save it once streaming finishes
+      if (!conversationId) {
+        setMessages((prev) => [...prev, modelMessage]);
+      }
 
       const stream = streamMultimodalResponse(
         effectiveModel,
@@ -260,15 +321,25 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
         const chunkText = chunk.text || "";
         fullText += chunkText;
         
-        // Split by characters to simulate token-by-token if chunks are large
-        // or just push the whole chunk if it's small. 
-        // Pushing characters gives the smoothest feel.
         for (const char of chunkText) {
           tokenQueue.push(char);
         }
       }
       
       isTyping = false;
+
+      // Save model response to Firestore
+      const finalModelMessage: Message = {
+        id: (Date.now() + 2).toString(),
+        role: "model",
+        parts: [{ text: fullText }],
+        timestamp: Date.now(),
+      };
+
+      const currentConvId = conversationId; // Re-check as it might have been set
+      if (currentConvId) {
+        await saveMessage(currentConvId, finalModelMessage);
+      }
     } catch (error: any) {
       console.error("Streaming error:", error);
       setError(error);
@@ -283,6 +354,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
       });
     } finally {
       setIsStreaming(false);
+      setIsUploading(false);
     }
   };
 
@@ -415,7 +487,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, onBack, onAgentSelect }) => {
 
       <MultimodalInput 
         onSend={handleSend} 
-        isStreaming={isStreaming} 
+        isStreaming={isStreaming || isUploading} 
         isLiveActive={isConnected}
         onToggleLive={toggleSession}
         isVideoActive={isVideoActive}

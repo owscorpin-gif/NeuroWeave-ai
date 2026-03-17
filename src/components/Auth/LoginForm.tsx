@@ -1,23 +1,20 @@
 import React, { useState } from "react";
-import { User, Mail, ShieldCheck, ArrowRight } from "lucide-react";
+import { ShieldCheck, LogIn } from "lucide-react";
 import { useFirebase } from "../../context/FirebaseContext";
 
 export const LoginForm: React.FC = () => {
   const { login } = useFirebase();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim() || !email.trim()) return;
-    
+  const handleGoogleLogin = async () => {
     setLoading(true);
-    // Simulate a small delay for effect
-    setTimeout(() => {
-      login(name, email);
+    try {
+      await login();
+    } catch (error) {
+      console.error("Login failed:", error);
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -34,49 +31,31 @@ export const LoginForm: React.FC = () => {
         NeuroWeave Identity
       </h2>
       <p className="text-gray-400 mb-8 text-sm">
-        Enter your details to access the multimodal network
+        Connect your account to access the multimodal network
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-4 text-left">
-        <div className="relative">
-          <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Full Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-accent transition-colors"
-            required
-          />
-        </div>
-
-        <div className="relative">
-          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
-          <input
-            type="email"
-            placeholder="Email Address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:border-accent transition-colors"
-            required
-          />
-        </div>
-
+      <div className="space-y-4">
         <button
-          type="submit"
-          disabled={loading || !name.trim() || !email.trim()}
-          className="w-full flex items-center justify-center gap-2 px-8 py-4 bg-accent text-white font-bold rounded-xl hover:bg-accent-hover transition-all active:scale-95 disabled:opacity-50 glow-accent"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-100 transition-all active:scale-95 disabled:opacity-50 shadow-xl"
         >
           {loading ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
           ) : (
             <>
-              <span>Initialize Session</span>
-              <ArrowRight size={18} />
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+              <span>Continue with Google</span>
             </>
           )}
         </button>
-      </form>
+        
+        <div className="flex items-center gap-4 py-4">
+          <div className="h-px flex-1 bg-white/10" />
+          <span className="text-[10px] text-gray-500 uppercase tracking-widest">Secure Access</span>
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+      </div>
       
       <p className="mt-12 text-[10px] text-gray-600 uppercase tracking-[0.3em]">Think. See. Create.</p>
     </div>

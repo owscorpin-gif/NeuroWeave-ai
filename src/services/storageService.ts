@@ -46,8 +46,21 @@ export const uploadFileSecurely = async (file: File, folder: string = "uploads")
     const url = await getDownloadURL(snapshot.ref);
 
     return { url };
-  } catch (error) {
-    console.error("Upload error:", error);
-    return { url: "", error: "Failed to upload file securely. Please try again." };
+  } catch (error: any) {
+    console.error("Upload error details:", {
+      message: error.message,
+      code: error.code,
+      name: error.name,
+      stack: error.stack
+    });
+    
+    if (error.code === 'storage/unauthorized') {
+      return { url: "", error: "Upload failed: You don't have permission to upload to this folder." };
+    }
+    if (error.code === 'storage/retry-limit-exceeded') {
+      return { url: "", error: "Upload failed: Network timeout. Please check your connection." };
+    }
+    
+    return { url: "", error: `Upload failed: ${error.message || "Unknown error"}. Please try again.` };
   }
 };

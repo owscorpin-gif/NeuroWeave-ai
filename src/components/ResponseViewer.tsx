@@ -59,7 +59,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ message, isStrea
               {part.inlineData && part.inlineData.mimeType.startsWith("image/") && (
                 <div className="mt-4 rounded-2xl overflow-hidden border border-white/10 shadow-2xl max-w-2xl">
                   <img
-                    src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
+                    src={part.fileUrl || `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
                     alt="AI Generated"
                     className="w-full h-auto"
                     referrerPolicy="no-referrer"
@@ -70,7 +70,7 @@ export const ResponseViewer: React.FC<ResponseViewerProps> = ({ message, isStrea
               {part.inlineData && part.inlineData.mimeType.startsWith("audio/") && (
                 <div className="mt-4">
                   <AudioPlayer 
-                    src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`} 
+                    src={part.fileUrl || `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`} 
                     mimeType={part.inlineData.mimeType}
                   />
                 </div>

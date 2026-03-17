@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, getDocFromServer, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '../firebase';
+import { auth, db, signInWithGoogle } from '../firebase';
 
 enum OperationType {
   CREATE = 'create',
@@ -66,8 +66,8 @@ interface FirebaseContextType {
   role: string | null;
   loading: boolean;
   isAuthReady: boolean;
-  login: (name: string, email: string) => void;
-  logout: () => void;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
@@ -75,8 +75,8 @@ const FirebaseContext = createContext<FirebaseContextType>({
   role: null,
   loading: true,
   isAuthReady: false,
-  login: () => {},
-  logout: () => {},
+  login: async () => {},
+  logout: async () => {},
 });
 
 export const useFirebase = () => useContext(FirebaseContext);
@@ -88,43 +88,81 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [isAuthReady, setIsAuthReady] = useState(false);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('neuroweave_user');
-    if (savedUser) {
-      const parsedUser = JSON.parse(savedUser);
-      setUser(parsedUser);
-      setRole('user'); // Default role for all users
-    }
-    setLoading(false);
-    setIsAuthReady(true);
-
-    const testConnection = async () => {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration. The client is offline.");
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Check if user exists in Firestore
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          let userData: AppUser;
+          
+          if (!userDoc.exists()) {
+            // Create new user profile
+            userData = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              displayName: firebaseUser.displayName || 'Anonymous User',
+              photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`,
+            };
+            
+            await setDoc(userDocRef, {
+              ...userData,
+              role: 'user',
+              createdAt: serverTimestamp(),
+              lastLogin: serverTimestamp()
+            });
+            setRole('user');
+          } else {
+            const data = userDoc.data();
+            userData = {
+              uid: data.uid,
+              email: data.email,
+              displayName: data.displayName,
+              photoURL: data.photoURL,
+            };
+            setRole(data.role || 'user');
+            
+            // Update last login
+            await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
+          }
+          
+          setUser(userData);
+        } catch (error) {
+          console.error("Error syncing user profile:", error);
+          // Fallback to basic auth info if Firestore fails
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || 'User',
+            photoURL: firebaseUser.photoURL || undefined
+          });
         }
+      } else {
+        setUser(null);
+        setRole(null);
       }
-    };
-    testConnection();
+      setLoading(false);
+      setIsAuthReady(true);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const login = (name: string, email: string) => {
-    const newUser: AppUser = {
-      uid: `user_${Date.now()}`,
-      email,
-      displayName: name,
-      photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${name}`,
-    };
-    setUser(newUser);
-    setRole('user');
-    localStorage.setItem('neuroweave_user', JSON.stringify(newUser));
+  const login = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error("Login error:", error);
+    }
   };
 
-  const logout = () => {
-    setUser(null);
-    setRole(null);
-    localStorage.removeItem('neuroweave_user');
+  const logout = async () => {
+    try {
+      await auth.signOut();
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
   };
 
   return (

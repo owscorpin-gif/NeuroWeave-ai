@@ -79,6 +79,8 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       setFiles(prev => [...prev, ...newFiles]);
+      // Reset input value so the same file can be selected again
+      e.target.value = '';
     }
   };
 
@@ -252,7 +254,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
           placeholder={isLiveActive ? (isLinguist ? "Translating..." : "Listening...") : (isRecordingMessage ? "Recording voice message..." : "Ask NeuroWeave anything...")}
           className="flex-1 bg-transparent border-none focus:ring-0 text-white py-3 px-2 resize-none max-h-40 min-h-[44px] placeholder:text-gray-500"
           rows={1}
-          disabled={isLiveActive || isRecordingMessage}
+          disabled={isRecordingMessage}
         />
 
         {(isLiveActive || isRecordingMessage) && (
@@ -291,7 +293,7 @@ export const MultimodalInput: React.FC<MultimodalInputProps> = ({
 
         <button
           onClick={handleSend}
-          disabled={(!text.trim() && files.length === 0) || isStreaming || isLiveActive || isRecordingMessage}
+          disabled={(!text.trim() && files.length === 0) || isStreaming || (isLiveActive && !text.trim() && files.length === 0) || isRecordingMessage}
           className="p-3 rounded-xl bg-accent text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-hover transition-all glow-accent"
         >
           <Send size={20} />

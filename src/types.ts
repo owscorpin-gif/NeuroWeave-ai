@@ -17,6 +17,7 @@ export interface MessagePart {
   videoMetadata?: {
     videoUri: string;
   };
+  fileUrl?: string;
 }
 
 export interface Message {
