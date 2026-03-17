@@ -1,22 +1,17 @@
 import React, { useState } from "react";
-import { ShieldCheck, User, Mail, ArrowRight } from "lucide-react";
+import { ShieldCheck, ArrowRight } from "lucide-react";
 import { useFirebase } from "../../context/FirebaseContext";
 
 export const LoginForm: React.FC = () => {
-  const { loginSimple } = useFirebase();
+  const { login } = useFirebase();
   const [loading, setLoading] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  const handleSimpleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !email) return;
-    
+  const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      await loginSimple(name, email);
+      await login();
     } catch (err: any) {
       console.error("Login failed:", err);
       setError(err.message || "Failed to initialize session. Please try again.");
@@ -36,10 +31,10 @@ export const LoginForm: React.FC = () => {
       </div>
 
       <h2 className="text-3xl font-serif font-bold text-white mb-2">
-        NeuroWeave Identity
+        NeuroWeave Access
       </h2>
       <p className="text-gray-400 mb-8 text-sm">
-        Enter your details to access the multimodal network
+        Sign in with your Google account to access the multimodal network
       </p>
 
       {error && (
@@ -48,52 +43,28 @@ export const LoginForm: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSimpleLogin} className="space-y-4 text-left">
-        <div className="space-y-2">
-          <label className="text-[10px] text-gray-500 uppercase tracking-widest ml-1">Full Name</label>
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Alex Weaver"
-              required
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-accent/50 transition-colors"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-[10px] text-gray-500 uppercase tracking-widest ml-1">Email Address</label>
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="alex@example.com"
-              required
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-accent/50 transition-colors"
-            />
-          </div>
-        </div>
-
+      <div className="space-y-4">
         <button
-          type="submit"
-          disabled={loading || !name || !email}
-          className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-accent text-white font-bold rounded-xl hover:bg-accent/80 transition-all active:scale-95 disabled:opacity-50 shadow-xl mt-6 group"
+          onClick={handleGoogleLogin}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-3 px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-all active:scale-95 disabled:opacity-50 shadow-xl mt-6 group"
         >
           {loading ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
           ) : (
             <>
-              <span>Initialize Session</span>
+              <img 
+                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+                alt="Google" 
+                className="w-5 h-5"
+                referrerPolicy="no-referrer"
+              />
+              <span>Sign in with Google</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </>
           )}
         </button>
-      </form>
+      </div>
       
       <p className="mt-12 text-[10px] text-gray-600 uppercase tracking-[0.3em]">Think. See. Create.</p>
     </div>

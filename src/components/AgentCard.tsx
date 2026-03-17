@@ -1,5 +1,5 @@
 import React from "react";
-import { Zap, PenTool, Compass, ArrowRight } from "lucide-react";
+import { Zap, PenTool, Compass, ArrowRight, Monitor, Cpu } from "lucide-react";
 import { Agent, AgentType } from "../types";
 import { motion } from "motion/react";
 
@@ -7,6 +7,8 @@ const icons = {
   Zap,
   PenTool,
   Compass,
+  Monitor,
+  Cpu,
 };
 
 interface AgentCardProps {

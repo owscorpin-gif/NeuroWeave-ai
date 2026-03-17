@@ -57,8 +57,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "shashwat.kesarwani12405@gmail.com" && request.auth.token.email_verified == true));
+        ((request.auth.token.email == "shashwat.kesarwani12405@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -115,9 +116,13 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /system/health {
+      allow read: if true;
     }
 
     match /conversations/{conversationId} {
@@ -128,7 +133,7 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if isAuthenticated() && (get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid || isAdmin());
-        allow create: if isAuthenticated() && (get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid) && isValidMessage(request.resource.data);
+        allow create: if isAuthenticated() && get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid && isValidMessage(request.resource.data);
       }
     }
 

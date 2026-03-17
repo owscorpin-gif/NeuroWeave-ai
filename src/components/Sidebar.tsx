@@ -24,10 +24,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onCon
   
   useEffect(() => {
     if (user) {
-      const unsubscribe = getUserConversations(user.uid, (convs) => {
-        setConversations(convs);
-      });
-      return () => unsubscribe();
+      try {
+        const unsubscribe = getUserConversations(user.uid, (convs) => {
+          setConversations(convs);
+        });
+        return () => unsubscribe();
+      } catch (err) {
+        console.error("Failed to attach conversation listener:", err);
+      }
     }
   }, [user]);
 

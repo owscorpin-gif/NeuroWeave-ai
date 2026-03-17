@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { Message } from "../types";
+import { handleFirestoreError, OperationType } from "../context/FirebaseContext";
 
 export interface Conversation {
   id: string;
@@ -79,8 +80,9 @@ export const saveMessage = async (conversationId: string, message: Message) => {
  * Fetches all conversations for a user
  */
 export const getUserConversations = (userId: string, callback: (conversations: Conversation[]) => void) => {
+  const path = "conversations";
   const q = query(
-    collection(db, "conversations"),
+    collection(db, path),
     where("userId", "==", userId),
     orderBy("updatedAt", "desc")
   );
@@ -91,6 +93,8 @@ export const getUserConversations = (userId: string, callback: (conversations: C
       ...doc.data()
     } as Conversation));
     callback(conversations);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.LIST, path);
   });
 };
 
@@ -98,6 +102,7 @@ export const getUserConversations = (userId: string, callback: (conversations: C
  * Fetches messages for a conversation
  */
 export const getConversationMessages = (conversationId: string, callback: (messages: Message[]) => void) => {
+  const path = `conversations/${conversationId}/messages`;
   const q = query(
     collection(db, "conversations", conversationId, "messages"),
     orderBy("timestamp", "asc")
@@ -114,6 +119,8 @@ export const getConversationMessages = (conversationId: string, callback: (messa
       } as Message;
     });
     callback(messages);
+  }, (error) => {
+    handleFirestoreError(error, OperationType.LIST, path);
   });
 };
 

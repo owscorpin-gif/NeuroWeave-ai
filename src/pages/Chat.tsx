@@ -43,10 +43,14 @@ export const Chat: React.FC<ChatProps> = ({ agent, conversationId: initialConver
   // Load messages if conversationId changes
   useEffect(() => {
     if (conversationId) {
-      const unsubscribe = getConversationMessages(conversationId, (loadedMessages) => {
-        setMessages(loadedMessages);
-      });
-      return () => unsubscribe();
+      try {
+        const unsubscribe = getConversationMessages(conversationId, (loadedMessages) => {
+          setMessages(loadedMessages);
+        });
+        return () => unsubscribe();
+      } catch (err) {
+        console.error("Failed to attach message listener:", err);
+      }
     } else {
       setMessages([]);
     }
@@ -236,7 +240,7 @@ export const Chat: React.FC<ChatProps> = ({ agent, conversationId: initialConver
     // Persistence Logic
     let currentConvId = conversationId;
     if (!currentConvId && user) {
-      // Create new conversation
+      // Create new conversation in Firestore
       const title = sanitizedText ? sanitizedText.substring(0, 30) : "New Media Chat";
       currentConvId = await createConversation(user.uid, agent!.id, title);
       setConversationId(currentConvId);

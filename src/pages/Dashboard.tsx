@@ -82,7 +82,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
         <h3 className="text-2xl font-serif font-bold text-white mb-8">Sample Capabilities</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <button 
-            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'live-agent')!)}
+            onClick={() => {
+              const agent = AGENTS.find(a => a.id === 'live-agent');
+              if (agent) onAgentSelect(agent);
+            }}
             className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group text-left w-full"
           >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -98,7 +101,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
           </button>
 
           <button 
-            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'global-translator')!)}
+            onClick={() => {
+              const agent = AGENTS.find(a => a.id === 'global-translator');
+              if (agent) onAgentSelect(agent);
+            }}
             className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group text-left w-full"
           >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -116,7 +122,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
           </button>
 
           <button 
-            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'ui-navigator')!)}
+            onClick={() => {
+              const agent = AGENTS.find(a => a.id === 'ui-navigator');
+              if (agent) onAgentSelect(agent);
+            }}
             className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group text-left w-full"
           >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -133,7 +142,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
           </button>
 
           <button 
-            onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'creative-storyteller')!)}
+            onClick={() => {
+              const agent = AGENTS.find(a => a.id === 'creative-storyteller');
+              if (agent) onAgentSelect(agent);
+            }}
             className="glass p-8 rounded-3xl border-white/5 hover:border-accent/30 transition-colors group md:col-span-2 text-left w-full"
           >
             <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -162,7 +174,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
               Enable multiple agents to work together on complex tasks. Nexus can orchestrate Muse for visuals, Voyager for UI analysis, and Linguist for global reach.
             </p>
             <button 
-              onClick={() => onAgentSelect(AGENTS.find(a => a.id === 'nexus-orchestrator')!)}
+              onClick={() => {
+                const agent = AGENTS.find(a => a.id === 'nexus-orchestrator');
+                if (agent) onAgentSelect(agent);
+              }}
               className="px-8 py-4 bg-white text-black font-bold rounded-2xl hover:bg-gray-200 transition-colors"
             >
               Launch Nexus Orchestrator
@@ -178,7 +193,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ onAgentSelect }) => {
             ].map((item, i) => (
               <button 
                 key={i} 
-                onClick={() => onAgentSelect(AGENTS.find(a => a.id === item.id)!)}
+                onClick={() => {
+                  const agent = AGENTS.find(a => a.id === item.id);
+                  if (agent) onAgentSelect(agent);
+                }}
                 className="aspect-square bg-white/5 rounded-2xl border border-white/10 flex items-center justify-center group hover:border-accent/30 transition-colors"
               >
                 <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center group-hover:scale-110 transition-transform">
