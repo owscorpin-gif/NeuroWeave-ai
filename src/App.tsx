@@ -15,7 +15,7 @@ import { LoginForm } from "./components/Auth/LoginForm";
 import { Cpu } from "lucide-react";
 
 export default function App() {
-  const { user, loading } = useFirebase();
+  const { user, loading, isLocalMode } = useFirebase();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -65,6 +65,15 @@ export default function App() {
       />
       
       <main className="flex-1 relative overflow-hidden flex flex-col">
+        {isLocalMode && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[10px] font-mono text-amber-500 uppercase tracking-widest">
+              <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+              <span>Running in Local Mode (Cloud Sync Disabled)</span>
+            </div>
+            <p className="text-[10px] text-amber-500/60 italic">Enable Anonymous Auth in Firebase Console for cloud features</p>
+          </div>
+        )}
         <AnimatePresence mode="wait">
           {activeTab === "dashboard" && (
             <motion.div

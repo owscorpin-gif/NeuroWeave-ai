@@ -3,6 +3,7 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signInAnonymously,
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
   sendEmailVerification,
@@ -34,6 +35,7 @@ export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export const signInWithGoogle = () => signInWithPopup(auth, googleProvider);
+export const signInAsGuest = () => signInAnonymously(auth);
 export const signOut = () => auth.signOut();
 
 export { 

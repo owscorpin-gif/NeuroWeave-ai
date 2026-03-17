@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, setDoc, getDocFromServer, serverTimestamp } from 'firebase/firestore';
-import { auth, db, signInWithGoogle } from '../firebase';
+import { auth, db, signInWithGoogle, signInAsGuest } from '../firebase';
 
 enum OperationType {
   CREATE = 'create',
@@ -66,7 +66,9 @@ interface FirebaseContextType {
   role: string | null;
   loading: boolean;
   isAuthReady: boolean;
+  isLocalMode: boolean;
   login: () => Promise<void>;
+  loginSimple: (name: string, email: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -75,7 +77,9 @@ const FirebaseContext = createContext<FirebaseContextType>({
   role: null,
   loading: true,
   isAuthReady: false,
+  isLocalMode: false,
   login: async () => {},
+  loginSimple: async () => {},
   logout: async () => {},
 });
 
@@ -86,51 +90,82 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isLocalMode, setIsLocalMode] = useState(false);
+  const [pendingProfile, setPendingProfile] = useState<{name: string, email: string} | null>(null);
+
+  // Test connection to Firestore on boot
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'system', 'health'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Firestore is offline. Please check your Firebase configuration.");
+        }
+      }
+    }
+    testConnection();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          // Check if user exists in Firestore
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
-          
-          let userData: AppUser;
-          
-          if (!userDoc.exists()) {
-            // Create new user profile
-            userData = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              displayName: firebaseUser.displayName || 'Anonymous User',
-              photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`,
-            };
+      try {
+        if (firebaseUser) {
+          // Set a timeout for Firestore operations to prevent hanging
+          const firestorePromise = (async () => {
+            const userDocRef = doc(db, 'users', firebaseUser.uid);
+            const userDoc = await getDoc(userDocRef);
             
-            await setDoc(userDocRef, {
-              ...userData,
-              role: 'user',
-              createdAt: serverTimestamp(),
-              lastLogin: serverTimestamp()
-            });
-            setRole('user');
-          } else {
-            const data = userDoc.data();
-            userData = {
-              uid: data.uid,
-              email: data.email,
-              displayName: data.displayName,
-              photoURL: data.photoURL,
-            };
-            setRole(data.role || 'user');
+            let userData: AppUser;
             
-            // Update last login
-            await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
-          }
-          
-          setUser(userData);
-        } catch (error) {
-          console.error("Error syncing user profile:", error);
-          // Fallback to basic auth info if Firestore fails
+            if (!userDoc.exists()) {
+              const name = pendingProfile?.name || firebaseUser.displayName || 'Anonymous User';
+              const email = pendingProfile?.email || firebaseUser.email || '';
+
+              userData = {
+                uid: firebaseUser.uid,
+                email: email,
+                displayName: name,
+                photoURL: firebaseUser.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${firebaseUser.uid}`,
+              };
+              
+              await setDoc(userDocRef, {
+                ...userData,
+                role: 'user',
+                createdAt: serverTimestamp(),
+                lastLogin: serverTimestamp()
+              });
+              setRole('user');
+              setPendingProfile(null);
+            } else {
+              const data = userDoc.data();
+              userData = {
+                uid: data.uid,
+                email: data.email,
+                displayName: data.displayName,
+                photoURL: data.photoURL,
+              };
+              setRole(data.role || 'user');
+              await setDoc(userDocRef, { lastLogin: serverTimestamp() }, { merge: true });
+            }
+            return userData;
+          })();
+
+          // Race against a 5-second timeout
+          const timeoutPromise = new Promise<null>((_, reject) => 
+            setTimeout(() => reject(new Error("Firestore timeout")), 5000)
+          );
+
+          const userData = await Promise.race([firestorePromise, timeoutPromise]);
+          if (userData) setUser(userData as AppUser);
+        } else {
+          setUser(null);
+          setRole(null);
+        }
+      } catch (error) {
+        console.error("Auth sync error:", error);
+        if (firebaseUser) {
+          // Fallback to basic info if Firestore is slow or failing
           setUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email || '',
@@ -138,22 +173,54 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             photoURL: firebaseUser.photoURL || undefined
           });
         }
-      } else {
-        setUser(null);
-        setRole(null);
+      } finally {
+        setLoading(false);
+        setIsAuthReady(true);
       }
-      setLoading(false);
-      setIsAuthReady(true);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [pendingProfile]);
 
   const login = async () => {
     try {
       await signInWithGoogle();
     } catch (error) {
       console.error("Login error:", error);
+    }
+  };
+
+  const loginSimple = async (name: string, email: string) => {
+    try {
+      setPendingProfile({ name, email });
+      await signInAsGuest();
+    } catch (error: any) {
+      console.error("Simple login error details:", error);
+      
+      const errorMsg = error.message || String(error);
+      const isRestricted = error.code === 'auth/admin-restricted-operation' || 
+                          errorMsg.includes('admin-restricted-operation') ||
+                          errorMsg.includes('restricted-operation');
+
+      // Handle the "Anonymous Auth Disabled" error by falling back to Local Mode
+      if (isRestricted) {
+        console.warn("Anonymous auth disabled. Falling back to Local Mode.");
+        const localUid = `local-${Date.now()}`;
+        const userData = {
+          uid: localUid,
+          email: email,
+          displayName: name,
+          photoURL: `https://api.dicebear.com/7.x/avataaars/svg?seed=${localUid}`,
+        };
+        setUser(userData);
+        setRole('user');
+        setIsLocalMode(true);
+        setLoading(false);
+        setIsAuthReady(true);
+      } else {
+        setPendingProfile(null);
+        throw error;
+      }
     }
   };
 
@@ -166,7 +233,7 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   return (
-    <FirebaseContext.Provider value={{ user, role, loading, isAuthReady, login, logout }}>
+    <FirebaseContext.Provider value={{ user, role, loading, isAuthReady, isLocalMode, login, loginSimple, logout }}>
       {children}
     </FirebaseContext.Provider>
   );

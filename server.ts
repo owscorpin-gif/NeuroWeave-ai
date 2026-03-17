@@ -66,8 +66,8 @@ async function startServer() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: true, // Required for SameSite=None
+      sameSite: "none", // Required for cross-origin iframe
       maxAge: 3600000 // 1 hour
     }
   }));
@@ -76,13 +76,13 @@ async function startServer() {
     cookie: {
       name: "_csrf",
       options: {
-        httpOnly: false, // Frontend needs to read it for double-submit or we provide an endpoint
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict"
+        httpOnly: false, // Frontend needs to read it
+        secure: true, // Required for SameSite=None
+        sameSite: "none" // Required for cross-origin iframe
       }
     }
   }));
-  app.use(lusca.xframe("SAMEORIGIN"));
+  // app.use(lusca.xframe("SAMEORIGIN")); // Removed for AI Studio iframe compatibility
   app.use(lusca.p3p("ABCDEF"));
   app.use(lusca.hsts({ maxAge: 31536000 }));
   app.use(lusca.xssProtection(true));
