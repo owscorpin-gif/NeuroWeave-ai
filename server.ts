@@ -12,22 +12,42 @@ import xss from "xss";
 import cookieParser from "cookie-parser";
 import session from "express-session";
 import lusca from "lusca";
-import { authenticate, authorize } from "./server/middleware/auth.ts";
-import { networkSecurity } from "./server/middleware/networkSecurity.ts";
+import { authenticate, authorize } from "./server/middleware/auth";
+import { networkSecurity } from "./server/middleware/networkSecurity";
 import slowDown from "express-slow-down";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin
-const firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
-admin.initializeApp({
-  projectId: firebaseConfig.projectId,
-});
+let firebaseConfig;
+try {
+  if (fs.existsSync("./firebase-applet-config.json")) {
+    firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
+  } else {
+    firebaseConfig = {
+      projectId: process.env.FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    };
+  }
+} catch (err) {
+  console.error("Error loading Firebase config:", err);
+}
+
+if (firebaseConfig && (firebaseConfig.projectId || firebaseConfig.credential)) {
+  admin.initializeApp({
+    projectId: firebaseConfig.projectId,
+    credential: firebaseConfig.privateKey ? admin.credential.cert(firebaseConfig as any) : undefined,
+  });
+} else {
+  // Fallback for environments with default credentials
+  admin.initializeApp();
+}
 
 const db = admin.firestore();
 
-async function startServer() {
+export async function createServer() {
   const app = express();
   const PORT = 3000;
 
@@ -193,12 +213,26 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 NeuroWeave AI Server running on http://localhost:${PORT}`);
+  return app;
+}
+
+// Only start the server if this file is run directly (not as a module)
+const isMain = process.argv[1] && (path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url)));
+
+if (isMain || !process.env.VERCEL) {
+  createServer().then(app => {
+    const PORT = Number(process.env.PORT) || 3000;
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 NeuroWeave AI Server running on http://localhost:${PORT}`);
+    });
+  }).catch((err) => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
   });
 }
 
-startServer().catch((err) => {
-  console.error("Failed to start server:", err);
-  process.exit(1);
-});
+// Export the server for Vercel
+export default async (req: any, res: any) => {
+  const app = await createServer();
+  return app(req, res);
+};
