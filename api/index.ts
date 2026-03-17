@@ -1,6 +1,7 @@
 import express from "express";
 import admin from "firebase-admin";
 import fs from "fs";
+import path from "path";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import cors from "cors";
@@ -15,9 +16,10 @@ import slowDown from "express-slow-down";
 
 // Initialize Firebase Admin
 let firebaseConfig;
+const configPath = path.join(process.cwd(), "firebase-applet-config.json");
 try {
-  if (fs.existsSync("./firebase-applet-config.json")) {
-    firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
   } else {
     firebaseConfig = {
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -31,10 +33,13 @@ try {
 
 if (firebaseConfig && (firebaseConfig.projectId || firebaseConfig.credential)) {
   if (!admin.apps.length) {
-    admin.initializeApp({
+    const options: any = {
       projectId: firebaseConfig.projectId,
-      credential: firebaseConfig.privateKey ? admin.credential.cert(firebaseConfig as any) : undefined,
-    });
+    };
+    if (firebaseConfig.privateKey) {
+      options.credential = admin.credential.cert(firebaseConfig as any);
+    }
+    admin.initializeApp(options);
   }
 } else {
   if (!admin.apps.length) {

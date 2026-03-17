@@ -21,9 +21,10 @@ const __dirname = path.dirname(__filename);
 
 // Initialize Firebase Admin
 let firebaseConfig;
+const configPath = path.join(process.cwd(), "firebase-applet-config.json");
 try {
-  if (fs.existsSync("./firebase-applet-config.json")) {
-    firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
+  if (fs.existsSync(configPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
   } else {
     firebaseConfig = {
       projectId: process.env.FIREBASE_PROJECT_ID,
@@ -36,13 +37,20 @@ try {
 }
 
 if (firebaseConfig && (firebaseConfig.projectId || firebaseConfig.credential)) {
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-    credential: firebaseConfig.privateKey ? admin.credential.cert(firebaseConfig as any) : undefined,
-  });
+  if (!admin.apps.length) {
+    const options: any = {
+      projectId: firebaseConfig.projectId,
+    };
+    if (firebaseConfig.privateKey) {
+      options.credential = admin.credential.cert(firebaseConfig as any);
+    }
+    admin.initializeApp(options);
+  }
 } else {
   // Fallback for environments with default credentials
-  admin.initializeApp();
+  if (!admin.apps.length) {
+    admin.initializeApp();
+  }
 }
 
 const db = admin.firestore();
@@ -216,12 +224,10 @@ export async function createServer() {
   return app;
 }
 
-// Only start the server if this file is run directly (not as a module)
-const isMain = process.argv[1] && (path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url)));
-
-if (isMain || !process.env.VERCEL) {
+// Only start the server if we are not in a serverless environment like Vercel
+if (!process.env.VERCEL) {
   createServer().then(app => {
-    const PORT = Number(process.env.PORT) || 3000;
+    const PORT = 3000;
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 NeuroWeave AI Server running on http://localhost:${PORT}`);
     });
